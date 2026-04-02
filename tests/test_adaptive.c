@@ -85,7 +85,7 @@ TEST(test_pref_decay)
     eai_pref_init(&store, NULL);
 
     eai_pref_set(&store, "strong", "val", EAI_PREF_STRING, 1.0f);
-    eai_pref_set(&store, "weak", "val", EAI_PREF_STRING, 0.02f);
+    eai_pref_set(&store, "weak", "val", EAI_PREF_STRING, 0.01f);
 
     assert(eai_pref_decay(&store, 30.0f) == EAI_OK);
 
