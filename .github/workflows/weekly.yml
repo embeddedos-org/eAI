@@ -18,7 +18,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Configure
         run: cmake -B build -DEAI_BUILD_TESTS=ON
       - name: Build
@@ -34,7 +34,7 @@ jobs:
       matrix:
         profile: [smart-camera, industrial-gateway, robot-controller, mobile-edge, adaptive-edge]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Build ${{ matrix.profile }}
         run: |
           cmake -B build -DEAI_PROFILE=${{ matrix.profile }}
