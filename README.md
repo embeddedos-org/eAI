@@ -2,7 +2,7 @@
 
 > High-performance on-device AI for embedded systems, edge devices, and intelligent machines.
 
-[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![C Standard](https://img.shields.io/badge/C-C11-orange.svg)]()
 [![ISO](https://img.shields.io/badge/ISO-15288%20|%2020243%20|%2025000-purple.svg)](docs/compliance/)
@@ -287,7 +287,7 @@ int main(void) {
 
     // Supply chain verification
     eai_fw_supply_chain_t sbom;
-    eai_fw_sc_init(&sbom, "eAI", "0.2.0");
+    eai_fw_sc_init(&sbom, "eAI", "0.1.0");
     eai_fw_sc_add_component(&sbom, "llama.cpp", "b3600",
                              "ggerganov", "sha256:...", EAI_LICENSE_MIT);
     eai_fw_sc_verify_all(&sbom);
