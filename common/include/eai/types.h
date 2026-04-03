@@ -43,12 +43,12 @@ typedef enum {
 } eai_mode_t;
 
 typedef enum {
-    EAI_LOG_TRACE,
-    EAI_LOG_DEBUG,
-    EAI_LOG_INFO,
-    EAI_LOG_WARN,
-    EAI_LOG_ERROR,
-    EAI_LOG_FATAL,
+    EAI_LVL_TRACE,
+    EAI_LVL_DEBUG,
+    EAI_LVL_INFO,
+    EAI_LVL_WARN,
+    EAI_LVL_ERROR,
+    EAI_LVL_FATAL,
 } eai_log_level_t;
 
 typedef struct {

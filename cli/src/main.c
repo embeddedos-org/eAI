@@ -226,7 +226,7 @@ static int cmd_run(const eai_config_t *cfg)
 
 int main(int argc, char *argv[])
 {
-    eai_log_set_level(EAI_LOG_INFO);
+    eai_log_set_level(EAI_LVL_INFO);
 
     if (argc < 2) {
         print_usage(argv[0]);

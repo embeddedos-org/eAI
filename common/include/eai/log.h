@@ -12,11 +12,11 @@ void eai_log_set_level(eai_log_level_t level);
 void eai_log_set_output(FILE *fp);
 void eai_log_write(eai_log_level_t level, const char *module, const char *fmt, ...);
 
-#define EAI_LOG_TRACE(mod, ...) eai_log_write(EAI_LOG_TRACE, mod, __VA_ARGS__)
-#define EAI_LOG_DEBUG(mod, ...) eai_log_write(EAI_LOG_DEBUG, mod, __VA_ARGS__)
-#define EAI_LOG_INFO(mod, ...)  eai_log_write(EAI_LOG_INFO,  mod, __VA_ARGS__)
-#define EAI_LOG_WARN(mod, ...)  eai_log_write(EAI_LOG_WARN,  mod, __VA_ARGS__)
-#define EAI_LOG_ERROR(mod, ...) eai_log_write(EAI_LOG_ERROR, mod, __VA_ARGS__)
-#define EAI_LOG_FATAL(mod, ...) eai_log_write(EAI_LOG_FATAL, mod, __VA_ARGS__)
+#define EAI_LOG_TRACE(mod, ...) eai_log_write(EAI_LVL_TRACE, mod, __VA_ARGS__)
+#define EAI_LOG_DEBUG(mod, ...) eai_log_write(EAI_LVL_DEBUG, mod, __VA_ARGS__)
+#define EAI_LOG_INFO(mod, ...)  eai_log_write(EAI_LVL_INFO,  mod, __VA_ARGS__)
+#define EAI_LOG_WARN(mod, ...)  eai_log_write(EAI_LVL_WARN,  mod, __VA_ARGS__)
+#define EAI_LOG_ERROR(mod, ...) eai_log_write(EAI_LVL_ERROR, mod, __VA_ARGS__)
+#define EAI_LOG_FATAL(mod, ...) eai_log_write(EAI_LVL_FATAL, mod, __VA_ARGS__)
 
 #endif /* EAI_LOG_H */

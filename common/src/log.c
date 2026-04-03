@@ -8,7 +8,7 @@
 #include <stdarg.h>
 #include <time.h>
 
-static eai_log_level_t g_log_level = EAI_LOG_INFO;
+static eai_log_level_t g_log_level = EAI_LVL_INFO;
 static FILE           *g_log_fp    = NULL;
 
 static const char *level_names[] = {

@@ -22,7 +22,7 @@ static eai_status_t log_execute(eai_bci_output_t *out, const eai_bci_intent_t *i
     (void)out;
     if (!intent) return EAI_ERR_INVALID;
 
-    EAI_LOG_INFO("BCI Intent: class=%u label='%s' confidence=%.3f timestamp=%llu",
+    EAI_LOG_INFO("bci", "BCI Intent: class=%u label='%s' confidence=%.3f timestamp=%llu",
                  intent->class_id, intent->label, intent->confidence,
                  (unsigned long long)intent->timestamp_us);
     return EAI_OK;
