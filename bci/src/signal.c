@@ -6,6 +6,10 @@
 #include <string.h>
 #include <math.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 /* ========== Ring Buffer Operations ========== */
 
 eai_status_t eai_bci_signal_init(eai_bci_signal_t *sig, uint8_t num_channels,

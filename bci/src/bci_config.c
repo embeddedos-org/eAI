@@ -33,7 +33,7 @@ eai_status_t eai_bci_config_load(eai_bci_config_t *cfg, const char *path)
 
     eai_bci_config_defaults(cfg);
 
-    EAI_LOG_INFO("BCI config: loaded defaults (file parsing placeholder for '%s')", path);
+    EAI_LOG_INFO("bci", "BCI config: loaded defaults (file parsing placeholder for '%s')", path);
     return EAI_OK;
 }
 
@@ -59,13 +59,13 @@ eai_status_t eai_bci_config_validate(const eai_bci_config_t *cfg)
 void eai_bci_config_dump(const eai_bci_config_t *cfg)
 {
     if (!cfg) return;
-    EAI_LOG_INFO("BCI Config:");
-    EAI_LOG_INFO("  device:     %s", cfg->device_name);
-    EAI_LOG_INFO("  decoder:    %s", cfg->decoder_name);
-    EAI_LOG_INFO("  output:     %s", cfg->output_name);
-    EAI_LOG_INFO("  channels:   %u", cfg->num_channels);
-    EAI_LOG_INFO("  rate:       %u Hz", cfg->sample_rate_hz);
-    EAI_LOG_INFO("  filter:     %.1f-%.1f Hz, notch %.1f Hz",
+    EAI_LOG_INFO("bci", "BCI Config:");
+    EAI_LOG_INFO("bci", "  device:     %s", cfg->device_name);
+    EAI_LOG_INFO("bci", "  decoder:    %s", cfg->decoder_name);
+    EAI_LOG_INFO("bci", "  output:     %s", cfg->output_name);
+    EAI_LOG_INFO("bci", "  channels:   %u", cfg->num_channels);
+    EAI_LOG_INFO("bci", "  rate:       %u Hz", cfg->sample_rate_hz);
+    EAI_LOG_INFO("bci", "  filter:     %.1f-%.1f Hz, notch %.1f Hz",
                  cfg->filter_low_hz, cfg->filter_high_hz, cfg->notch_hz);
-    EAI_LOG_INFO("  simulator:  %s", cfg->simulator_mode ? "yes" : "no");
+    EAI_LOG_INFO("bci", "  simulator:  %s", cfg->simulator_mode ? "yes" : "no");
 }
