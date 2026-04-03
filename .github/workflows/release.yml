@@ -15,12 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build
+      - name: Build & Test
         run: |
           cmake -B build -DEAI_BUILD_TESTS=ON
           cmake --build build
-      - name: Test
-        run: ctest --test-dir build --output-on-failure
+          ctest --test-dir build --output-on-failure
 
   cross-compile:
     name: Cross-Compile (${{ matrix.arch }})
@@ -29,40 +28,47 @@ jobs:
     strategy:
       matrix:
         include:
+          - arch: x86_64-linux
+            cc: gcc
+            pkg: ""
           - arch: aarch64-linux
-            packages: gcc-aarch64-linux-gnu
             cc: aarch64-linux-gnu-gcc
-            artifact_suffix: aarch64-linux
+            pkg: gcc-aarch64-linux-gnu
           - arch: arm-linux-gnueabihf
-            packages: gcc-arm-linux-gnueabihf
             cc: arm-linux-gnueabihf-gcc
-            artifact_suffix: arm-linux-gnueabihf
+            pkg: gcc-arm-linux-gnueabihf
           - arch: riscv64-linux
-            packages: gcc-riscv64-linux-gnu
             cc: riscv64-linux-gnu-gcc
-            artifact_suffix: riscv64-linux
+            pkg: gcc-riscv64-linux-gnu
     steps:
       - uses: actions/checkout@v4
       - name: Install cross-compiler
+        if: matrix.pkg != ''
         run: |
           sudo apt-get update
-          sudo apt-get install -y ${{ matrix.packages }}
+          sudo apt-get install -y ${{ matrix.pkg }}
       - name: Extract version
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-      - name: Cross-compile
+      - name: Build
         run: |
-          cmake -B build-${{ matrix.arch }} -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-${{ matrix.arch }}
-      - name: Package artifacts
+          cmake -B build \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+      - name: Package
         run: |
-          mkdir -p staging
-          find build-${{ matrix.arch }} -name "*.a" -exec cp {} staging/ \;
-          tar czf eai-${{ steps.version.outputs.version }}-${{ matrix.artifact_suffix }}.tar.gz -C staging .
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+          mkdir -p staging/include staging/lib
+          find build -name "*.a" -exec cp {} staging/lib/ \;
+          cp -r common/include/* staging/include/ 2>/dev/null || true
+          cp -r framework/include/* staging/include/ 2>/dev/null || true
+          cp -r min/include/* staging/include/ 2>/dev/null || true
+          cp -r bci/include/* staging/include/ 2>/dev/null || true
+          tar czf eai-${{ steps.version.outputs.version }}-${{ matrix.arch }}.tar.gz -C staging .
+      - uses: actions/upload-artifact@v4
         with:
-          name: eai-${{ matrix.artifact_suffix }}
+          name: eai-${{ matrix.arch }}
           path: "*.tar.gz"
 
   release:
@@ -79,24 +85,45 @@ jobs:
           TAG=${GITHUB_REF#refs/tags/}
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "version=${TAG#v}" >> $GITHUB_OUTPUT
-      - name: Build native artifacts
+      - name: Generate changelog
+        id: changelog
         run: |
-          cmake -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build
-          mkdir -p staging
-          find build -name "*.a" -exec cp {} staging/ \;
-          tar czf eai-${{ steps.version.outputs.version }}-linux-x86_64.tar.gz -C staging .
-      - name: Download cross-compiled artifacts
+          PREV_TAG=$(git tag --sort=-v:refname | head -2 | tail -1)
+          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "${{ steps.version.outputs.tag }}" ]; then
+            CHANGES=$(git log ${PREV_TAG}..HEAD --oneline --no-merges)
+          else
+            CHANGES=$(git log --oneline --no-merges -20)
+          fi
+          echo "changes<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: eai-*
           merge-multiple: true
+      - name: Generate checksums
+        run: sha256sum *.tar.gz > SHA256SUMS.txt
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: "EAI ${{ steps.version.outputs.tag }}"
+          name: "eAI ${{ steps.version.outputs.tag }}"
           body: |
-            ## EAI ${{ steps.version.outputs.tag }} ΓÇö AI Layer
-            Initial release of the embedded AI Layer library.
-          files: "*.tar.gz"
+            ## eAI ${{ steps.version.outputs.tag }}
+
+            ### Libraries
+            | Archive | Target |
+            |---|---|
+            | `eai-*-x86_64-linux.tar.gz` | x86_64 Linux |
+            | `eai-*-aarch64-linux.tar.gz` | AArch64 (RPi 4/5, Jetson) |
+            | `eai-*-arm-linux-gnueabihf.tar.gz` | ARM (RPi 3, BeagleBone) |
+            | `eai-*-riscv64-linux.tar.gz` | RISC-V 64 |
+
+            ### Changes
+            ${{ steps.changelog.outputs.changes }}
+          files: |
+            *.tar.gz
+            SHA256SUMS.txt
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, 'rc') || contains(steps.version.outputs.version, 'beta') }}
