@@ -71,6 +71,7 @@ static eai_status_t sim_init(eai_bci_device_t *dev, const eai_kv_t *params, int 
 static eai_status_t sim_start_stream(eai_bci_device_t *dev)
 {
     sim_ctx_t *ctx = (sim_ctx_t *)dev->ctx;
+    if (!ctx) return EAI_ERR_INVALID;
     ctx->streaming      = true;
     ctx->sample_counter = 0;
     dev->state          = EAI_BCI_STATE_STREAMING;
@@ -80,6 +81,7 @@ static eai_status_t sim_start_stream(eai_bci_device_t *dev)
 static eai_status_t sim_stop_stream(eai_bci_device_t *dev)
 {
     sim_ctx_t *ctx = (sim_ctx_t *)dev->ctx;
+    if (!ctx) return EAI_ERR_INVALID;
     ctx->streaming = false;
     dev->state     = EAI_BCI_STATE_DISCONNECTED;
     return EAI_OK;
@@ -141,6 +143,7 @@ static eai_status_t sim_read_samples(eai_bci_device_t *dev, eai_bci_sample_t *ou
                                       int max_samples, int *samples_read)
 {
     sim_ctx_t *ctx = (sim_ctx_t *)dev->ctx;
+    if (!ctx) return EAI_ERR_INVALID;
     if (!ctx->streaming) return EAI_ERR_BCI_SIGNAL;
 
     int count = max_samples > 16 ? 16 : max_samples;
