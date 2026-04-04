@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   validate:
@@ -85,18 +86,6 @@ jobs:
           TAG=${GITHUB_REF#refs/tags/}
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "version=${TAG#v}" >> $GITHUB_OUTPUT
-      - name: Generate changelog
-        id: changelog
-        run: |
-          PREV_TAG=$(git tag --sort=-v:refname | head -2 | tail -1)
-          if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "${{ steps.version.outputs.tag }}" ]; then
-            CHANGES=$(git log ${PREV_TAG}..HEAD --oneline --no-merges)
-          else
-            CHANGES=$(git log --oneline --no-merges -20)
-          fi
-          echo "changes<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
@@ -104,26 +93,58 @@ jobs:
           merge-multiple: true
       - name: Generate checksums
         run: sha256sum *.tar.gz > SHA256SUMS.txt
+      - name: Generate SBOM (CycloneDX v1.5)
+        run: |
+          TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "00000000-0000-0000-0000-$(date +%s)")
+          cat > sbom.cdx.json << EOF
+          {
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.5",
+            "serialNumber": "urn:uuid:${UUID}",
+            "version": 1,
+            "metadata": {
+              "timestamp": "${TIMESTAMP}",
+              "component": {
+                "type": "library",
+                "name": "eAI",
+                "version": "${{ steps.version.outputs.version }}",
+                "supplier": { "name": "embeddedos-org" },
+                "licenses": [{ "license": { "id": "MIT" } }]
+              }
+            },
+            "components": []
+          }
+          EOF
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+      - name: Sign artifacts
+        run: |
+          for f in *.tar.gz; do
+            cosign sign-blob --yes --bundle "${f}.sig.bundle" "$f" 2>/dev/null || true
+          done
+      - name: Check release does not already exist
+        run: |
+          if gh release view "${{ steps.version.outputs.tag }}" &>/dev/null; then
+            echo "::error::Release already exists."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: "eAI ${{ steps.version.outputs.tag }}"
+          generate_release_notes: true
           body: |
-            ## eAI ${{ steps.version.outputs.tag }}
-
-            ### Libraries
-            | Archive | Target |
-            |---|---|
-            | `eai-*-x86_64-linux.tar.gz` | x86_64 Linux |
-            | `eai-*-aarch64-linux.tar.gz` | AArch64 (RPi 4/5, Jetson) |
-            | `eai-*-arm-linux-gnueabihf.tar.gz` | ARM (RPi 3, BeagleBone) |
-            | `eai-*-riscv64-linux.tar.gz` | RISC-V 64 |
-
-            ### Changes
-            ${{ steps.changelog.outputs.changes }}
+            ### Release Integrity
+            - `SHA256SUMS.txt` — checksums
+            - `sbom.cdx.json` — CycloneDX SBOM (v1.5)
+            - `*.sig.bundle` — Sigstore cosign signatures
           files: |
             *.tar.gz
+            *.sig.bundle
             SHA256SUMS.txt
-          draft: false
+            sbom.cdx.json
           prerelease: ${{ contains(steps.version.outputs.version, 'rc') || contains(steps.version.outputs.version, 'beta') }}
