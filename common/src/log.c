@@ -41,14 +41,10 @@ void eai_log_write(eai_log_level_t level, const char *module, const char *fmt, .
     if (level < g_log_level) return;
 
     FILE *out = g_log_fp ? g_log_fp : stderr;
+    char timebuf[16];
 
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
-    if (t) {
-        strftime(timebuf, sizeof(timebuf), "%H:%M:%S", t);
-    } else {
-        snprintf(timebuf, sizeof(timebuf), "??:??:??");
-    }
     if (t) {
         strftime(timebuf, sizeof(timebuf), "%H:%M:%S", t);
     } else {
