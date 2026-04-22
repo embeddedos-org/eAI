@@ -1,5 +1,9 @@
 # eAI — Embedded AI Layer
 
+[![CI](https://github.com/embeddedos-org/eai/actions/workflows/ci.yml/badge.svg)](https://github.com/embeddedos-org/eai/actions/workflows/ci.yml)
+[![Nightly](https://github.com/embeddedos-org/eai/actions/workflows/nightly.yml/badge.svg)](https://github.com/embeddedos-org/eai/actions/workflows/nightly.yml)
+[![Release](https://github.com/embeddedos-org/eai/actions/workflows/release.yml/badge.svg)](https://github.com/embeddedos-org/eai/actions/workflows/release.yml)
+
 > High-performance on-device AI for embedded systems, edge devices, and intelligent machines.
 
 [![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](CHANGELOG.md)
