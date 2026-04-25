@@ -1,3 +1,14 @@
+---
+title: "eAI — Official Reference Guide"
+author: "Srikanth Patchava & EmbeddedOS Contributors"
+date: "April 2026"
+version: "v1.0.0"
+bibliography: references.bib
+csl: ieee.csl
+titlepage: true
+titlepage-background: "cover.png"
+---
+
 # eAI: The Definitive Reference Guide
 
 ## Embedded AI Framework
@@ -10,7 +21,7 @@
 
 ---
 
-*A comprehensive technical reference for the eAI embedded AI framework — high-performance on-device AI for embedded systems, edge devices, and intelligent machines.*
+*A comprehensive technical reference for the eAI embedded AI framework — high-performance on-device AI for embedded systems, edge [@deng2020] devices, and intelligent machines.*
 
 *Published by the EmbeddedOS Project*
 *Copyright (c) 2026 EoS Project. MIT License.*
@@ -23,7 +34,7 @@ eAI is a C11 embedded AI framework that brings LLM inference, autonomous agents,
 
 eAI is designed for systems where latency matters, connectivity is unreliable, and safety is non-negotiable: robotics, industrial automation, smart cameras, medical devices, autonomous vehicles, and IoT gateways.
 
-This reference guide covers the complete eAI framework: the two-tier architecture (EAI-Min and EAI-Framework), model formats and the EAIM model registry, the inference pipeline, the 8-layer security architecture including secure boot for models, BCI integration via eIPC, TFLite Micro and llama.cpp backends, on-device LLM inference, adaptive learning, federated learning, and the full API reference for all 37+ modules.
+This reference guide covers the complete eAI framework: the two-tier architecture (EAI-Min and EAI-Framework), model formats and the EAIM model registry, the inference pipeline, the 8-layer security architecture including secure boot for models, BCI integration via eIPC, TFLite [@tflite_micro] Micro and llama.cpp backends, on-device LLM inference, adaptive learning, federated [@mcmahan2017] learning, and the full API reference for all 37+ modules.
 
 ### Who This Book Is For
 
@@ -38,7 +49,7 @@ This reference guide covers the complete eAI framework: the two-tier architectur
 - **Part I: Foundations** — Architecture, design principles, and two-tier system
 - **Part II: EAI-Min** — Lightweight runtime for MCUs and edge devices
 - **Part III: EAI-Framework** — Enterprise platform for edge servers
-- **Part IV: Models and Inference** — Model registry, quantization, inference pipeline
+- **Part IV: Models and Inference** — Model registry, quantiz [@jacob2018]ation, inference pipeline
 - **Part V: Security** — 8-layer defense architecture, secure boot, guardrails
 - **Part VI: Advanced Topics** — Adaptive learning, federated learning, BCI integration
 - **Part VII: Reference** — Complete API, CLI, configuration, troubleshooting
@@ -74,7 +85,7 @@ This reference guide covers the complete eAI framework: the two-tier architectur
   - [Chapter 20: AI Safety and Guardrails](#chapter-20-ai-safety-and-guardrails)
   - [Chapter 21: Supply Chain Security](#chapter-21-supply-chain-security)
 - [Part VI: Advanced Topics](#part-vi-advanced-topics)
-  - [Chapter 22: Adaptive Learning and LoRA](#chapter-22-adaptive-learning-and-lora)
+  - [Chapter 22: Adaptive Learning and LoRA [@hu2021]](#chapter-22-adaptive-learning-and-lora)
   - [Chapter 23: Federated Learning](#chapter-23-federated-learning)
   - [Chapter 24: BCI Integration via eIPC](#chapter-24-bci-integration-via-eipc)
   - [Chapter 25: Deployment Profiles](#chapter-25-deployment-profiles)
@@ -1388,3 +1399,8 @@ See `docs/compliance/` for traceability matrix, risk register, and audit logs.
 
 ---
 Part of the [EmbeddedOS Organization](https://embeddedos-org.github.io).
+
+## References
+
+::: {#refs}
+:::
