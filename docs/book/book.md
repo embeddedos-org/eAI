@@ -156,6 +156,9 @@ make && ctest
 
 ### 2.1 Overview
 
+![Figure: eAI Two-Tier Architecture — EAI-Min (MCU) and EAI-Framework (Edge/Cloud)](images/two-tier-architecture.png)
+
+
 eAI ships as two distinct product tiers sharing a common foundation:
 
 ```
@@ -725,6 +728,9 @@ eai_min_compression_recommend(&comp, 256, &rec);
 ## Chapter 16: Inference Pipeline
 
 ### 16.1 Pipeline Stages
+
+![Figure: eAI Inference Pipeline — sensor input through quantized model inference to action output](images/inference-pipeline.png)
+
 
 ```
 Input Prompt
