@@ -30,6 +30,9 @@ titlepage-background: "cover.png"
 
 ## Preface
 
+
+![Figure: eAI — 3D Product Visualization](images/product-3d.png)
+
 eAI is a C11 embedded AI framework that brings LLM inference, autonomous agents, and adaptive learning directly to resource-constrained devices — from microcontrollers to edge servers. It runs entirely on-device with zero cloud dependency, while supporting optional hybrid connectivity.
 
 eAI is designed for systems where latency matters, connectivity is unreliable, and safety is non-negotiable: robotics, industrial automation, smart cameras, medical devices, autonomous vehicles, and IoT gateways.
