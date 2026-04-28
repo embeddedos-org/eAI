@@ -30,6 +30,12 @@ const char *eai_status_str(eai_status_t status)
         case EAI_ERR_BCI_SIGNAL:     return "ERR_BCI_SIGNAL";
         case EAI_ERR_BCI_CALIBRATION: return "ERR_BCI_CALIBRATION";
         case EAI_ERR_BCI_DECODE:     return "ERR_BCI_DECODE";
+        case EAI_ERR_PLATFORM:       return "ERR_PLATFORM";
+        case EAI_ERR_ACCEL:          return "ERR_ACCEL";
+        case EAI_ERR_FORMAT:         return "ERR_FORMAT";
+        case EAI_ERR_DELEGATE:       return "ERR_DELEGATE";
+        case EAI_ERR_NOT_IMPLEMENTED: return "ERR_NOT_IMPLEMENTED";
+        case EAI_ERR_HW_UNAVAILABLE: return "ERR_HW_UNAVAILABLE";
         default:                    return "UNKNOWN";
     }
 }

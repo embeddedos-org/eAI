@@ -6,6 +6,7 @@
 
 #include "eai_bci/api.h"
 #include <string>
+#include <vector>
 #include <stdexcept>
 #include <optional>
 #include <cstdint>
@@ -50,6 +51,17 @@ public:
     int channel_count() const { return eai_bci_get_channel_count(handle_); }
     int sample_rate()   const { return eai_bci_get_sample_rate(handle_); }
     uint64_t samples_processed() const { return eai_bci_get_samples_processed(handle_); }
+
+    std::vector<float> get_signal(int max_samples = 256) const {
+        int channels = channel_count();
+        if (channels <= 0) channels = 1;
+        std::vector<float> buf(static_cast<size_t>(max_samples) * channels);
+        int samples_out = 0;
+        int rc = eai_bci_get_signal(handle_, buf.data(), max_samples, channels, &samples_out);
+        if (rc != 0) return {};
+        buf.resize(static_cast<size_t>(samples_out) * channels);
+        return buf;
+    }
 
     static std::string version() { return eai_bci_version(); }
 

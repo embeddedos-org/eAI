@@ -2,6 +2,83 @@ add_executable(eai_test_common test_common.c)
 target_link_libraries(eai_test_common PRIVATE eai_common)
 add_test(NAME eai_common_tests COMMAND eai_test_common)
 
+add_executable(eai_test_platform test_platform.c)
+target_link_libraries(eai_test_platform PRIVATE eai_common eai_platform)
+add_test(NAME eai_platform_tests COMMAND eai_test_platform)
+
+add_executable(eai_test_hal_core test_hal_core.c)
+target_link_libraries(eai_test_hal_core PRIVATE eai_common eai_platform)
+add_test(NAME eai_hal_core_tests COMMAND eai_test_hal_core)
+
+if(EAI_BUILD_ACCEL)
+    add_executable(eai_test_accel test_accel.c)
+    target_link_libraries(eai_test_accel PRIVATE eai_common eai_accel)
+    if(UNIX)
+        target_link_libraries(eai_test_accel PRIVATE m)
+    endif()
+    add_test(NAME eai_accel_tests COMMAND eai_test_accel)
+
+    # --- Comprehensive tensor tests ---
+    add_executable(eai_test_tensor test_tensor.c)
+    target_link_libraries(eai_test_tensor PRIVATE eai_common eai_accel)
+    add_test(NAME eai_tensor_tests COMMAND eai_test_tensor)
+
+    # --- Comprehensive accel backend tests ---
+    add_executable(eai_test_accel_backend test_accel_backend.c)
+    target_link_libraries(eai_test_accel_backend PRIVATE eai_common eai_accel)
+    if(UNIX)
+        target_link_libraries(eai_test_accel_backend PRIVATE m)
+    endif()
+    add_test(NAME eai_accel_backend_tests COMMAND eai_test_accel_backend)
+endif()
+
+# --- Comprehensive format tests ---
+if(EAI_BUILD_FORMATS)
+    add_executable(eai_test_formats test_formats.c)
+    target_link_libraries(eai_test_formats PRIVATE eai_common eai_accel eai_formats)
+    add_test(NAME eai_format_tests COMMAND eai_test_formats)
+endif()
+
+# --- Comprehensive status/types tests ---
+add_executable(eai_test_status test_status.c)
+target_link_libraries(eai_test_status PRIVATE eai_common)
+add_test(NAME eai_status_tests COMMAND eai_test_status)
+
+# --- Comprehensive platform HAL tests ---
+add_executable(eai_test_platform_hal test_platform_hal.c)
+target_link_libraries(eai_test_platform_hal PRIVATE eai_common eai_platform)
+add_test(NAME eai_platform_hal_tests COMMAND eai_test_platform_hal)
+
+# --- Stable C API tests ---
+add_executable(eai_test_eai_api test_eai_api.c)
+target_link_libraries(eai_test_eai_api PRIVATE eai_common eai_platform)
+add_test(NAME eai_api_tests COMMAND eai_test_eai_api)
+
+# --- HAL subsystem tests (fs/thread/net) ---
+add_executable(eai_test_hal_subsystems test_hal_subsystems.c)
+target_link_libraries(eai_test_hal_subsystems PRIVATE eai_common eai_platform)
+if(WIN32)
+    target_link_libraries(eai_test_hal_subsystems PRIVATE ws2_32)
+elseif(UNIX)
+    target_link_libraries(eai_test_hal_subsystems PRIVATE pthread)
+endif()
+add_test(NAME eai_hal_subsystem_tests COMMAND eai_test_hal_subsystems)
+
+# --- Extended format tests (GGUF numeric KV, tensors, format_load, ONNX multi-field) ---
+if(EAI_BUILD_FORMATS)
+    add_executable(eai_test_formats_ext test_formats_extended.c)
+    target_link_libraries(eai_test_formats_ext PRIVATE eai_common eai_accel eai_formats)
+    if(UNIX)
+        target_link_libraries(eai_test_formats_ext PRIVATE m)
+    endif()
+    add_test(NAME eai_format_ext_tests COMMAND eai_test_formats_ext)
+endif()
+
+# --- Extended API tests (accel count/name, HAL-routed platform API) ---
+add_executable(eai_test_api_extended test_api_extended.c)
+target_link_libraries(eai_test_api_extended PRIVATE eai_common eai_platform)
+add_test(NAME eai_api_extended_tests COMMAND eai_test_api_extended)
+
 add_executable(eai_test_min test_min.c)
 target_link_libraries(eai_test_min PRIVATE eai_common eai_min)
 add_test(NAME eai_min_tests COMMAND eai_test_min)

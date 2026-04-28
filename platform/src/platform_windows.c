@@ -12,6 +12,10 @@
 #ifdef _WIN32
 
 #include <windows.h>
+#include <winternl.h>
+
+/* RtlGetVersion is preferred over the deprecated/lying GetVersionEx */
+typedef NTSTATUS (WINAPI *RtlGetVersionPtr)(PRTL_OSVERSIONINFOW);
 
 static eai_status_t win_init(eai_platform_t *plat)
 {
@@ -21,13 +25,24 @@ static eai_status_t win_init(eai_platform_t *plat)
 
 static eai_status_t win_get_device_info(eai_platform_t *plat, char *buf, size_t buf_size)
 {
-    OSVERSIONINFOA vi;
+    RTL_OSVERSIONINFOW vi;
     memset(&vi, 0, sizeof(vi));
     vi.dwOSVersionInfoSize = sizeof(vi);
-    snprintf(buf, buf_size, "Windows %lu.%lu (Build %lu)",
-             (unsigned long)vi.dwMajorVersion,
-             (unsigned long)vi.dwMinorVersion,
-             (unsigned long)vi.dwBuildNumber);
+
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    if (ntdll) {
+        RtlGetVersionPtr fn = (RtlGetVersionPtr)GetProcAddress(ntdll, "RtlGetVersion");
+        if (fn && fn(&vi) == 0) {
+            snprintf(buf, buf_size, "Windows %lu.%lu (Build %lu)",
+                     (unsigned long)vi.dwMajorVersion,
+                     (unsigned long)vi.dwMinorVersion,
+                     (unsigned long)vi.dwBuildNumber);
+            return EAI_OK;
+        }
+    }
+
+    /* Fallback if RtlGetVersion unavailable */
+    snprintf(buf, buf_size, "Windows (version unknown)");
     return EAI_OK;
 }
 

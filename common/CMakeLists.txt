@@ -7,6 +7,7 @@ add_library(eai_common STATIC
     src/tools_builtin.c
     src/runtime_contract.c
     src/adaptive.c
+    src/eai_api.c
 )
 
 target_include_directories(eai_common PUBLIC

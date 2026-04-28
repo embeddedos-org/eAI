@@ -96,6 +96,32 @@ static void test_status_strings(void)
     PASS();
 }
 
+static void test_new_error_codes(void)
+{
+    TEST(new_error_codes);
+    const char *s;
+
+    s = eai_status_str(EAI_ERR_PLATFORM);
+    if (!s || strcmp(s, "ERR_PLATFORM") != 0) { FAIL("ERR_PLATFORM"); return; }
+
+    s = eai_status_str(EAI_ERR_ACCEL);
+    if (!s || strcmp(s, "ERR_ACCEL") != 0) { FAIL("ERR_ACCEL"); return; }
+
+    s = eai_status_str(EAI_ERR_FORMAT);
+    if (!s || strcmp(s, "ERR_FORMAT") != 0) { FAIL("ERR_FORMAT"); return; }
+
+    s = eai_status_str(EAI_ERR_DELEGATE);
+    if (!s || strcmp(s, "ERR_DELEGATE") != 0) { FAIL("ERR_DELEGATE"); return; }
+
+    s = eai_status_str(EAI_ERR_NOT_IMPLEMENTED);
+    if (!s || strcmp(s, "ERR_NOT_IMPLEMENTED") != 0) { FAIL("ERR_NOT_IMPLEMENTED"); return; }
+
+    s = eai_status_str(EAI_ERR_HW_UNAVAILABLE);
+    if (!s || strcmp(s, "ERR_HW_UNAVAILABLE") != 0) { FAIL("ERR_HW_UNAVAILABLE"); return; }
+
+    PASS();
+}
+
 int main(void)
 {
     printf("=== EAI Common Tests ===\n\n");
@@ -105,6 +131,7 @@ int main(void)
     test_tool_exec();
     test_security_ctx();
     test_status_strings();
+    test_new_error_codes();
 
     printf("\n=== Results: %d/%d passed, %d failed ===\n",
            tests_passed, tests_run, tests_failed);

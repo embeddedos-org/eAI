@@ -29,6 +29,12 @@ typedef enum {
     EAI_ERR_BCI_SIGNAL,
     EAI_ERR_BCI_CALIBRATION,
     EAI_ERR_BCI_DECODE,
+    EAI_ERR_PLATFORM,
+    EAI_ERR_ACCEL,
+    EAI_ERR_FORMAT,
+    EAI_ERR_DELEGATE,
+    EAI_ERR_NOT_IMPLEMENTED,
+    EAI_ERR_HW_UNAVAILABLE,
 } eai_status_t;
 
 typedef enum {
