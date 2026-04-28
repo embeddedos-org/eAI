@@ -1,0 +1,29 @@
+{
+    "name": "eai",
+    "version": "0.2.0",
+    "description": "eAI — Embedded AI framework for intelligent systems",
+    "homepage": "https://github.com/embeddedos-org/eAI",
+    "license": "MIT",
+    "supports": "x64 | arm64",
+    "dependencies": [],
+    "features": {
+        "gguf": {
+            "description": "GGUF model format support"
+        },
+        "onnx": {
+            "description": "ONNX model format support"
+        },
+        "vulkan": {
+            "description": "Vulkan Compute accelerator backend"
+        },
+        "coreml": {
+            "description": "CoreML/Metal accelerator backend (macOS/iOS only)"
+        },
+        "bci": {
+            "description": "Brain-Computer Interface module"
+        },
+        "tools": {
+            "description": "Developer tools (bench, convert, profile)"
+        }
+    }
+}

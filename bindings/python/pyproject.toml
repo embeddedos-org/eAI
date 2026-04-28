@@ -1,0 +1,29 @@
+[build-system]
+requires = ["scikit-build-core>=0.5", "cmake>=3.16"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "eai"
+version = "0.2.0"
+description = "eAI — Embedded AI framework for intelligent systems"
+readme = "../../README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: C",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Hardware",
+]
+
+[project.optional-dependencies]
+numpy = ["numpy>=1.20"]
+dev = ["pytest", "numpy"]
+
+[tool.scikit-build]
+cmake.source-dir = "../.."
+cmake.build-type = "Release"
+cmake.args = ["-DEAI_BUILD_SHARED=ON", "-DEAI_BUILD_ACCEL=ON", "-DEAI_BUILD_FORMATS=ON"]

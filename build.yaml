@@ -3,13 +3,69 @@
 # ebuild auto-detects CMakeLists.txt and uses the cmake backend.
 
 name: eai
-version: "0.1.0"
+version: "0.2.0"
 backend: cmake
 
 cmake:
   build_type: Release
   defines:
     EAI_BUILD_TESTS: "ON"
+    EAI_BUILD_ACCEL: "ON"
+    EAI_BUILD_FORMATS: "ON"
+
+# Target matrix for CI
+targets:
+  - name: linux-x64
+    arch: x86_64
+    platform: linux
+    compiler: gcc
+    preset: linux-x64-release
+
+  - name: linux-arm64
+    arch: arm64
+    platform: linux
+    compiler: aarch64-linux-gnu-gcc
+    preset: linux-arm64-release
+
+  - name: windows-x64
+    arch: x86_64
+    platform: windows
+    compiler: msvc
+    preset: windows-x64-release
+
+  - name: macos-arm64
+    arch: arm64
+    platform: macos
+    compiler: clang
+    preset: macos-arm64-release
+
+  - name: macos-x64
+    arch: x86_64
+    platform: macos
+    compiler: clang
+    preset: macos-x64-release
+
+  - name: cortex-m4
+    arch: armv7
+    platform: baremetal
+    compiler: arm-none-eabi-gcc
+    preset: cortex-m4-release
+
+  - name: cortex-m7
+    arch: armv7
+    platform: baremetal
+    compiler: arm-none-eabi-gcc
+    preset: cortex-m7-release
+
+  - name: riscv32
+    arch: riscv32
+    platform: baremetal
+    compiler: riscv32-unknown-elf-gcc
+
+  - name: android-arm64
+    arch: arm64
+    platform: android
+    compiler: ndk-clang
 
 toolchain:
   compiler: gcc
