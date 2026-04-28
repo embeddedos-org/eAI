@@ -281,7 +281,7 @@ eai_status_t eai_min_update_apply(eai_min_update_t *upd, const char *target_path
                 remove(tmp_path);
                 EAI_LOG_ERROR(MOD, "write error during update copy");
                 upd->state = EAI_UPDATE_FAILED;
-                return EAI_ERR_GENERIC;
+                return EAI_ERR_IO;
             }
         }
         fclose(src);
@@ -293,7 +293,7 @@ eai_status_t eai_min_update_apply(eai_min_update_t *upd, const char *target_path
             remove(tmp_path);
             EAI_LOG_ERROR(MOD, "rename failed: %s -> %s", tmp_path, target_path);
             upd->state = EAI_UPDATE_FAILED;
-            return EAI_ERR_GENERIC;
+            return EAI_ERR_IO;
         }
 
         EAI_LOG_INFO(MOD, "update applied via copy: %s -> %s",

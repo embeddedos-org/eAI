@@ -195,16 +195,6 @@ const eai_connector_ops_t eai_connector_can_ops = {
     .subscribe  = NULL,
 };
 
-const eai_connector_ops_t eai_connector_can_ops = {
-    .name       = "can",
-    .type       = EAI_CONN_CAN,
-    .connect    = can_connect,
-    .disconnect = can_disconnect,
-    .read       = can_read,
-    .write      = can_write,
-    .subscribe  = NULL,
-};
-
 /* ---- Connector manager implementation ---- */
 
 eai_status_t eai_fw_conn_mgr_init(eai_fw_connector_mgr_t *mgr)

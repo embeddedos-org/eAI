@@ -356,7 +356,8 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    /* Developer tools subcommands */
+    /* Developer tools subcommands (only when built with EAI_BUILD_TOOLS) */
+#ifdef EAI_BUILD_TOOLS
     if (strcmp(cmd, "bench") == 0) {
         extern int eai_bench_main(int argc, const char **argv);
         return eai_bench_main(argc - 2, (const char **)(argv + 2));
@@ -369,6 +370,7 @@ int main(int argc, char *argv[])
         extern int eai_profile_main(int argc, const char **argv);
         return eai_profile_main(argc - 2, (const char **)(argv + 2));
     }
+#endif
 
     fprintf(stderr, "Unknown command: %s\n", cmd);
     print_usage(argv[0]);

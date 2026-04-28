@@ -9,6 +9,7 @@ target_link_libraries(eai PRIVATE
 
 # Developer tools — link sources and dependencies
 if(EAI_BUILD_TOOLS AND EAI_BUILD_ACCEL AND EAI_BUILD_FORMATS)
+    target_compile_definitions(eai PRIVATE EAI_BUILD_TOOLS)
     target_sources(eai PRIVATE
         ${CMAKE_SOURCE_DIR}/tools/bench/eai_bench.c
         ${CMAKE_SOURCE_DIR}/tools/convert/eai_convert.c
