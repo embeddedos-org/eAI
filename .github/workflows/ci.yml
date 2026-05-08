@@ -13,14 +13,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
-  # ═══════════════════════════════════════════════════════════
-  # Native builds — Linux, Windows, macOS with full module set
-  # ═══════════════════════════════════════════════════════════
   build:
     name: Build (${{ matrix.os }}, ${{ matrix.compiler }})
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -35,8 +34,6 @@ jobs:
             cxx: clang++
           - os: windows-latest
             compiler: msvc
-            cc: cl
-            cxx: cl
           - os: macos-latest
             compiler: apple-clang
             cc: clang
@@ -45,7 +42,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure
+      - name: Configure (Unix)
+        if: runner.os != 'Windows'
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
         run: >
           cmake -B build
           -DEAI_BUILD_TESTS=ON
@@ -55,9 +56,18 @@ jobs:
           -DEAI_BUILD_FRAMEWORK=ON
           -DEAI_BUILD_BCI=ON
           -DEAI_BUILD_CLI=ON
-        env:
-          CC: ${{ matrix.cc }}
-          CXX: ${{ matrix.cxx }}
+
+      - name: Configure (Windows / MSVC)
+        if: runner.os == 'Windows'
+        run: >
+          cmake -B build
+          -DEAI_BUILD_TESTS=ON
+          -DEAI_BUILD_ACCEL=ON
+          -DEAI_BUILD_FORMATS=ON
+          -DEAI_BUILD_MIN=ON
+          -DEAI_BUILD_FRAMEWORK=ON
+          -DEAI_BUILD_BCI=ON
+          -DEAI_BUILD_CLI=ON
 
       - name: Build
         run: cmake --build build --config Release --parallel 4
@@ -65,18 +75,9 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure -C Release --parallel 4
 
-      - name: Report test summary
-        if: always()
-        run: ctest --test-dir build --output-on-failure -C Release -N
-        continue-on-error: true
-
-  # ═══════════════════════════════════════════════════════════
-  # Linux cross-compilation for ARM/RISC-V
-  # ═══════════════════════════════════════════════════════════
   cross-compile:
     name: Cross (${{ matrix.target }})
     runs-on: ubuntu-latest
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -130,7 +131,6 @@ jobs:
       - name: Configure
         run: |
           CMAKE_ARGS="-DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_SYSTEM_NAME=${{ matrix.cmake_system }}"
-
           if [ "${{ matrix.toolchain }}" != "" ]; then
             CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=${{ matrix.toolchain }}"
             CMAKE_ARGS="$CMAKE_ARGS -DEAI_BUILD_TESTS=OFF -DEAI_BUILD_CLI=OFF -DEAI_BUILD_FRAMEWORK=OFF -DEAI_BUILD_BCI=OFF"
@@ -138,7 +138,6 @@ jobs:
           else
             CMAKE_ARGS="$CMAKE_ARGS -DEAI_BUILD_TESTS=ON -DEAI_BUILD_ACCEL=ON -DEAI_BUILD_FORMATS=ON"
           fi
-
           cmake -B build $CMAKE_ARGS
 
       - name: Build
@@ -148,24 +147,19 @@ jobs:
         if: ${{ matrix.can_test }}
         run: |
           export QEMU_LD_PREFIX=${{ matrix.qemu_prefix }}
-          cd build && ctest --output-on-failure --parallel 4 || true
-        continue-on-error: true
+          cd build && ctest --output-on-failure --parallel 4
 
       - name: Report binary sizes
         if: ${{ !matrix.can_test }}
         run: |
           echo "=== Binary sizes ==="
-          ${{ matrix.size_tool }} build/common/libeai_common.a || true
-          ${{ matrix.size_tool }} build/platform/libeai_platform.a || true
-          ${{ matrix.size_tool }} build/min/libeai_min.a || true
+          ${{ matrix.size_tool }} build/common/libeai_common.a 2>/dev/null || echo "(libeai_common.a not produced)"
+          ${{ matrix.size_tool }} build/platform/libeai_platform.a 2>/dev/null || echo "(libeai_platform.a not produced)"
+          ${{ matrix.size_tool }} build/min/libeai_min.a 2>/dev/null || echo "(libeai_min.a not produced)"
 
-  # ═══════════════════════════════════════════════════════════
-  # Android NDK cross-compilation
-  # ═══════════════════════════════════════════════════════════
   android:
     name: Android (${{ matrix.abi }})
     runs-on: ubuntu-latest
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -189,12 +183,6 @@ jobs:
         id: ndk
         with:
           ndk-version: r26d
-
-      - name: Cache CMake build
-        uses: actions/cache@v4
-        with:
-          path: build
-          key: android-${{ matrix.abi }}-${{ hashFiles('CMakeLists.txt', 'platform/**', 'accel/**') }}
 
       - name: Configure
         run: |
@@ -221,61 +209,77 @@ jobs:
             printf "  %-40s %d KB\n" "$(basename $f)" "$((SIZE / 1024))"
           done
 
-  # ═══════════════════════════════════════════════════════════
-  # Container platform testing (Docker)
-  # ═══════════════════════════════════════════════════════════
+  conan-build:
+    name: Conan Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect conanfile.py
+        id: detect
+        run: |
+          if [ -f conanfile.py ] || [ -f conanfile.txt ]; then
+            echo "has_conan=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_conan=false" >> $GITHUB_OUTPUT
+            echo "::notice::No conanfile.py / conanfile.txt found, skipping Conan build"
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.detect.outputs.has_conan == 'true'
+        with:
+          python-version: "3.11"
+      - name: Install Conan
+        if: steps.detect.outputs.has_conan == 'true'
+        run: pip install --upgrade conan
+      - name: Conan profile
+        if: steps.detect.outputs.has_conan == 'true'
+        run: conan profile detect --force
+      - name: Conan create
+        if: steps.detect.outputs.has_conan == 'true'
+        run: conan create . --build=missing
+
   container:
     name: Container (Docker)
     runs-on: ubuntu-latest
-    continue-on-error: true
     container:
       image: gcc:13
     steps:
       - uses: actions/checkout@v4
-
       - name: Install CMake
-        run: |
-          apt-get update && apt-get install -y cmake
-
-      - name: Configure (container-aware)
+        run: apt-get update && apt-get install -y cmake
+      - name: Configure
         run: |
           cmake -B build \
             -DEAI_BUILD_TESTS=ON \
             -DEAI_BUILD_ACCEL=ON \
             -DEAI_BUILD_FORMATS=ON \
             -DEAI_PLATFORM_CONTAINER=ON
-
       - name: Build
         run: cmake --build build --parallel $(nproc)
-
       - name: Test
-        run: |
-          cd build && ctest --output-on-failure --parallel 4
-          echo ""
-          echo "=== Container platform detection ==="
-          # The platform detect test should identify we're in a container
-          ./tests/eai_test_platform 2>&1 || true
+        run: cd build && ctest --output-on-failure --parallel 4
 
-  # ═══════════════════════════════════════════════════════════
-  # Deployment profiles
-  # ═══════════════════════════════════════════════════════════
   build-profiles:
     name: Profile (${{ matrix.profile }})
     runs-on: ubuntu-latest
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
-        profile:
-          - adaptive-edge
-          - bci-assistive
-          - industrial-gateway
-          - mobile-edge
-          - robot-controller
-          - smart-camera
+        include:
+          - profile: adaptive-edge
+            flags: "-DEAI_PROFILE_ADAPTIVE_EDGE=ON"
+          - profile: bci-assistive
+            flags: "-DEAI_PROFILE_BCI_ASSISTIVE=ON"
+          - profile: industrial-gateway
+            flags: "-DEAI_PROFILE_INDUSTRIAL_GATEWAY=ON"
+          - profile: mobile-edge
+            flags: "-DEAI_PROFILE_MOBILE_EDGE=ON"
+          - profile: robot-controller
+            flags: "-DEAI_PROFILE_ROBOT_CONTROLLER=ON"
+          - profile: smart-camera
+            flags: "-DEAI_PROFILE_SMART_CAMERA=ON"
     steps:
       - uses: actions/checkout@v4
-      - name: Build profile
+      - name: Build profile (${{ matrix.profile }})
         run: |
           cmake -B build \
             -DEAI_BUILD_TESTS=OFF \
@@ -283,16 +287,13 @@ jobs:
             -DEAI_BUILD_FRAMEWORK=ON \
             -DEAI_BUILD_BCI=ON \
             -DEAI_BUILD_ACCEL=ON \
-            -DEAI_BUILD_FORMATS=ON
+            -DEAI_BUILD_FORMATS=ON \
+            ${{ matrix.flags }}
           cmake --build build --parallel $(nproc)
 
-  # ═══════════════════════════════════════════════════════════
-  # Sanitizers (ASAN + UBSAN)
-  # ═══════════════════════════════════════════════════════════
   sanitize:
     name: Sanitizers
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Build with ASAN/UBSAN
@@ -304,18 +305,14 @@ jobs:
             -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g"
           cmake --build build --parallel $(nproc)
       - name: Run tests under sanitizers
-        run: ctest --test-dir build --output-on-failure --parallel 4
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1
+        run: ctest --test-dir build --output-on-failure --parallel 4
 
-  # ═══════════════════════════════════════════════════════════
-  # Static analysis
-  # ═══════════════════════════════════════════════════════════
   static-analysis:
     name: Static Analysis
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Install cppcheck
@@ -329,33 +326,24 @@ jobs:
             -I common/include -I platform/include -I accel/include -I formats/include \
             common/src platform/src accel/src formats/src
 
-  # ═══════════════════════════════════════════════════════════
-  # CI gate
-  # ═══════════════════════════════════════════════════════════
   ci-gate:
     name: CI Gate
     if: always()
     needs: [build, cross-compile, android, container, sanitize, static-analysis]
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Check results
         run: |
-          echo "═══════════════════════════════════════"
-          echo "  eAI CI Results"
-          echo "═══════════════════════════════════════"
           echo "Native build:     ${{ needs.build.result }}"
           echo "Cross-compile:    ${{ needs.cross-compile.result }}"
           echo "Android:          ${{ needs.android.result }}"
           echo "Container:        ${{ needs.container.result }}"
           echo "Sanitizers:       ${{ needs.sanitize.result }}"
           echo "Static analysis:  ${{ needs.static-analysis.result }}"
-          echo "═══════════════════════════════════════"
-
-          if [ "${{ needs.build.result }}" != "success" ]; then
-            echo "❌ Native build failed"; exit 1
-          fi
-          if [ "${{ needs.sanitize.result }}" != "success" ]; then
-            echo "❌ Sanitizers failed"; exit 1
-          fi
+          for r in "${{ needs.build.result }}" "${{ needs.cross-compile.result }}" "${{ needs.android.result }}" "${{ needs.container.result }}" "${{ needs.sanitize.result }}" "${{ needs.static-analysis.result }}"; do
+            if [ "$r" != "success" ]; then
+              echo "::error::CI gate failed (one or more jobs did not succeed)"
+              exit 1
+            fi
+          done
           echo "✅ CI gate passed"
