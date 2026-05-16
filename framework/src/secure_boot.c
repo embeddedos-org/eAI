@@ -10,6 +10,35 @@
 #include <time.h>
 #include <stdint.h>
 
+/* ============================================================================
+ * !!! DEVELOPMENT-STUB WARNING !!!
+ *
+ * `eai_fw_secboot_verify_chain` below hashes the *component name string* as a
+ * proxy for hashing the real component binary. The SHA-256 implementation is
+ * real (FIPS 180-4 below) but it is NOT applied to firmware bytes. Therefore
+ * this module gives a STRUCTURAL boot-chain mock — it MUST NOT be used as a
+ * cryptographic attestation in production deployments.
+ *
+ * To wire a real implementation you must:
+ *   1. Replace `sha256_hex(e->component_name, ...)` in
+ *      `eai_fw_secboot_verify_chain` with a hash over the actual firmware
+ *      bytes loaded from flash/storage for that stage.
+ *   2. Add signature verification (Ed25519/ECDSA) using the trusted keys
+ *      registered via `eai_fw_secboot_add_key`.
+ *   3. Compile with -DEAI_SECBOOT_REAL=1 to remove this banner and the
+ *      compile-time #warning below.
+ *
+ * Until step 3 is complete the build prints a warning on every compilation
+ * to make this contract very visible.
+ * ========================================================================== */
+#if !defined(EAI_SECBOOT_REAL) || EAI_SECBOOT_REAL == 0
+#  if defined(__GNUC__) || defined(__clang__)
+#    warning "eAI secure_boot.c is the DEVELOPMENT STUB. Define EAI_SECBOOT_REAL=1 for a real implementation."
+#  elif defined(_MSC_VER)
+#    pragma message("WARNING: eAI secure_boot.c is the DEVELOPMENT STUB. Define EAI_SECBOOT_REAL=1 for a real implementation.")
+#  endif
+#endif
+
 #define MOD "secboot"
 
 /* ========================================================================
