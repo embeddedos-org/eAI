@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "eai"
-version = "3.0.0"
+version = "3.0.1"
 description = "eAI — Embedded AI framework for intelligent systems"
 readme = "../../README.md"
 license = { text = "MIT" }
