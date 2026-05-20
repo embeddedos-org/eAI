@@ -182,7 +182,7 @@ jobs:
           ndk-version: r26d
 
       - name: Cache CMake build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: build-android-${{ matrix.abi }}
           key: android-${{ matrix.abi }}-${{ hashFiles('CMakeLists.txt', 'platform/**', 'accel/**', 'common/**') }}
