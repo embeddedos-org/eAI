@@ -20,7 +20,7 @@
 # ═══════════════════════════════════════════════════════════
 
 # ── Stage 1: Builder ──────────────────────────────────────
-FROM gcc:13-bookworm AS builder-gcc
+FROM gcc:15-bookworm AS builder-gcc
 FROM llvm/clang:17 AS builder-clang
 
 # Default to GCC
