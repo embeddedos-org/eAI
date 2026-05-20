@@ -331,7 +331,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # Enable QEMU for ARM64 emulation
       - name: Set up QEMU
