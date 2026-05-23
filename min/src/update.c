@@ -85,10 +85,9 @@ eai_status_t eai_min_update_verify(eai_min_update_t *upd) {
     EAI_LOG_INFO(MOD, "verifying update: %s", upd->pending_path);
 
     if (strlen(upd->expected_hash) == 0) {
-        EAI_LOG_WARN(MOD, "no hash provided, skipping verification");
-        upd->signature_valid = false;
-        upd->state = EAI_UPDATE_APPLYING;
-        return EAI_OK;
+        EAI_LOG_ERROR(MOD, "no hash provided, verification failed (mandatory)");
+        upd->state = EAI_UPDATE_FAILED;
+        return EAI_ERR_SIGNATURE;
     }
 
     /* Compute SHA-256 hash of the update file for verification */

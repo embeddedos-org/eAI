@@ -131,10 +131,10 @@ eai_status_t eai_min_router_infer_cloud(eai_min_router_t *router,
                    &port, path, sizeof(path), &use_https);
 
     if (use_https) {
-        EAI_LOG_WARN(LOG_MOD, "HTTPS not supported in minimal build, use HTTP endpoint");
-        strncpy(out->text, "[cloud] HTTPS requires TLS support", sizeof(out->text) - 1);
-        out->text_len = strlen(out->text);
-        return EAI_ERR_UNSUPPORTED;
+        EAI_LOG_WARN(LOG_MOD, "HTTPS requested but minimal build lacks TLS. Falling back to HTTP (INSECURE)");
+        port = 80;
+    } else {
+        EAI_LOG_WARN(LOG_MOD, "Using unencrypted HTTP for cloud inference (INSECURE)");
     }
 
 #ifdef _WIN32
