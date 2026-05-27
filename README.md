@@ -23,7 +23,7 @@ We continuously benchmark eAI — Embedded AI against the entire EmbeddedOS ecos
 
 ---
 
-## 🎬 Product Marketing Video
+## 🎬 Product Marketing Video (App Store Proof of Production)
 
 Experience eAI — Embedded AI in action! Watch our high-fidelity product demonstration and marketing video:
 
