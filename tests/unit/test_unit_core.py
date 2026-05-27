@@ -1,11 +1,13 @@
 import unittest
-
-class TesteAIUnit(unittest.TestCase):
-    def test_tensor_gemm_quantization(self):
-        # Simulate INT8 matrix multiplication (GEMM) for NPU
-        import numpy as np
-        # Use int16/int32 for accumulation to avoid 8-bit overflow
-        weights = np.array([[127, -127], [-64, 64]], dtype=np.int8)
-        inputs = np.array([[127, 127]], dtype=np.int8)
-        res = np.dot(inputs.astype(np.int32), weights.astype(np.int32))
-        assert res[0][0] == 8001, f"Quantized GEMM expected 8001, got {res[0][0]}"
+import numpy as np
+class TestEAIUnit(unittest.TestCase):
+    def test_tensor_gemm(self):
+        A = np.array([[1, 2], [3, 4]], dtype=np.int32)
+        B = np.array([[5, 6], [7, 8]], dtype=np.int32)
+        C = np.dot(A, B)
+        self.assertTrue(np.array_equal(C, [[19, 22], [43, 50]]))
+    def test_int8_quantization(self):
+        weights = np.array([-1.5, 0.0, 2.3], dtype=np.float32)
+        scale = 127.0 / max(abs(weights))
+        quantized = np.round(weights * scale).astype(np.int8)
+        self.assertEqual(quantized[2], 127)
