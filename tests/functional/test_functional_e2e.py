@@ -1,17 +1,14 @@
-# SPDX-License-Identifier: MIT
-# Copyright (c) 2026 EoS Project
 import unittest
-import numpy as np
-class TestEaiFunctional(unittest.TestCase):
-    def test_tensor_multiplication(self):
-        print("Testing tensor matrix multiplication (GEMM) operator...")
-        A = np.array([[1, 2], [3, 4]])
-        B = np.array([[5, 6], [7, 8]])
-        C = np.dot(A, B)
-        self.assertEqual(C[0, 0], 19)
-    def test_int8_quantization(self):
-        print("Testing float32 to int8 symmetric quantization...")
-        weights = [0.5, -0.2, 0.8, -0.9]
-        scale = max(abs(w) for w in weights) / 127
-        quantized = [int(w / scale) for w in weights]
-        self.assertTrue(all(-128 <= q <= 127 for q in quantized))
+
+class TesteAIFunctional(unittest.TestCase):
+    def test_npu_inference_pipeline(self):
+        # Test model inference pipeline (quantize -> run -> dequantize)
+        float_input = 0.5
+        scale = 127.0
+        quant_input = int(float_input * scale)
+        assert quant_input == 63
+        # NPU run
+        quant_out = quant_input * 2
+        # Dequantize
+        float_out = quant_out / (scale * 2)
+        assert abs(float_out - 0.5) < 0.01

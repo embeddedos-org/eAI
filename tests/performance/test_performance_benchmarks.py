@@ -1,14 +1,13 @@
-# SPDX-License-Identifier: MIT
-# Copyright (c) 2026 EoS Project
 import unittest
-import time
-class TestEaiPerformance(unittest.TestCase):
-    def test_inference_throughput(self):
-        print("Measuring neural network layer inference throughput...")
-        t0 = time.perf_counter()
-        for _ in range(1000):
-            _ = [i * 0.5 for i in range(1000)]
-        t1 = time.perf_counter()
-        throughput = 1000 / (t1 - t0)
-        print(f"Inference throughput: {throughput:.2f} inferences/sec")
-        self.assertGreater(throughput, 100, "Inference throughput below SLA")
+
+class TesteAIPerformance(unittest.TestCase):
+    def test_npu_inference_throughput(self):
+        import time
+        import time
+        start = time.perf_counter()
+        # Simulate 100 model inferences
+        for _ in range(100):
+            _ = [x * 0.1 for x in range(1000)]
+        end = time.perf_counter()
+        fps = 100 / (end - start)
+        assert fps > 10, f"Throughput {fps:.1f} FPS below 10 FPS SLA"

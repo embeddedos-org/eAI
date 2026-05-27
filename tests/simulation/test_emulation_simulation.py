@@ -1,10 +1,12 @@
-# SPDX-License-Identifier: MIT
-# Copyright (c) 2026 EoS Project
 import unittest
-class TestEaiSimulation(unittest.TestCase):
+
+class TesteAISimulation(unittest.TestCase):
     def test_npu_coprocessor_handshake(self):
-        print("Simulating NPU hardware coprocessor register handshake...")
-        npu_status = "IDLE"
-        npu_status = "RUNNING"
-        npu_status = "COMPLETE"
-        self.assertEqual(npu_status, "COMPLETE")
+        # Simulate register-level handshake with AI hardware accelerator
+        NPU_REG_STATUS = 0x00 # IDLE
+        NPU_REG_CMD = 0x01   # START
+        # Host writes START command
+        NPU_REG_STATUS = 0x02 # BUSY
+        # NPU completes execution
+        NPU_REG_STATUS = 0x04 # DONE
+        assert NPU_REG_STATUS == 0x04, "NPU hardware handshake simulation failed"
