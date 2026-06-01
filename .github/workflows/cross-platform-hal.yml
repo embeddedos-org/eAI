@@ -336,7 +336,7 @@ jobs:
       # Enable QEMU for ARM64 emulation
       - name: Set up QEMU
         if: matrix.name == 'arm64-qemu'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Build image
         run: |
