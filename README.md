@@ -52,7 +52,8 @@ This repository features **100% test coverage** across four critical categories:
 Requirements:
 - CMake 3.16+
 - C11 compiler
-- Python 3 (for `run_all_tests.py`)
+- Python 3.8+ (for `run_all_tests.py`)
+- Python packages: `pytest`, `numpy`
 
 Basic build:
 ```bash
