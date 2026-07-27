@@ -47,20 +47,6 @@ This repository features **100% test coverage** across four critical categories:
 3. **Performance Benchmarks**: Nanosecond-precision latency profiling.
 4. **Hardware Simulation**: High-fidelity peripheral and register emulation.
 
-To run the entire suite locally:
-```bash
-python run_all_tests.py
-```
-
-For native C tests, configure the project with tests enabled and run:
-```bash
-cmake -B build -DEAI_BUILD_TESTS=ON
-cmake --build build
-ctest --test-dir build --output-on-failure
-```
-
----
-
 ## 🛠️ Build from Source
 
 Requirements:
@@ -74,23 +60,31 @@ cmake -B build
 cmake --build build
 ```
 
----
+To run the entire suite locally:
+```bash
+python run_all_tests.py
+```
+
+To build and run the native test suite:
+```bash
+cmake -B build -DEAI_BUILD_TESTS=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
 
 ## 📁 Project Structure
 
-- `common/` shared contracts, config, logging, manifests, and tool registry
-- `platform/` platform detection and HAL adapters
-- `min/` lightweight runtime and single-agent flow
-- `framework/` industrial orchestration, policy, observability, and connectors
-- `bci/` brain-computer interface devices, decoders, and pipeline
-- `accel/` tensor and accelerator backend dispatch
-- `formats/` GGUF and ONNX model loaders
-- `models/` model catalog and metadata
-- `cli/` command-line entry point
-- `tests/` native C tests plus Python `pytest` directories
-- `bindings/python/` Python wrappers for `eai` and `eai_bci`
-
----
+- `common/` shared utilities and core components
+- `platform/` platform abstraction layer
+- `min/` lightweight runtime
+- `framework/` orchestration framework
+- `bci/` brain-computer interface components
+- `accel/` accelerator backends
+- `formats/` model format loaders
+- `models/` model definitions
+- `cli/` command-line interface
+- `tests/` native and Python tests
+- `bindings/python/` Python bindings
 
 ## 📜 License & Compliance
 
