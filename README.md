@@ -52,6 +52,44 @@ To run the entire suite locally:
 python run_all_tests.py
 ```
 
+For native C tests, configure the project with tests enabled and run:
+```bash
+cmake -B build -DEAI_BUILD_TESTS=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+---
+
+## 🛠️ Build from Source
+
+Requirements:
+- CMake 3.16+
+- C11 compiler
+- Python 3 (for `run_all_tests.py`)
+
+Basic build:
+```bash
+cmake -B build
+cmake --build build
+```
+
+---
+
+## 📁 Project Structure
+
+- `common/` shared contracts, config, logging, manifests, and tool registry
+- `platform/` platform detection and HAL adapters
+- `min/` lightweight runtime and single-agent flow
+- `framework/` industrial orchestration, policy, observability, and connectors
+- `bci/` brain-computer interface devices, decoders, and pipeline
+- `accel/` tensor and accelerator backend dispatch
+- `formats/` GGUF and ONNX model loaders
+- `models/` model catalog and metadata
+- `cli/` command-line entry point
+- `tests/` native C tests plus Python `pytest` directories
+- `bindings/python/` Python wrappers for `eai` and `eai_bci`
+
 ---
 
 ## 📜 License & Compliance
