@@ -65,7 +65,7 @@ jobs:
             extra_cmake: ""
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Configure
         run: >
@@ -112,7 +112,7 @@ jobs:
     name: HAL linux-arm64 (QEMU)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install tools
         run: |
@@ -167,7 +167,7 @@ jobs:
             run_emulator: true
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Java (required by Android SDK)
         uses: actions/setup-java@v4
@@ -270,7 +270,7 @@ jobs:
     if: false  # Enable by setting to: github.event_name != 'pull_request'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download test binaries
         uses: actions/download-artifact@v4
@@ -328,7 +328,7 @@ jobs:
             build_args: ""
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -377,7 +377,7 @@ jobs:
       image: ${{ matrix.image }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install build tools
         run: ${{ matrix.install }}
@@ -418,7 +418,7 @@ jobs:
             toolchain: cmake/toolchains/toolchain-arm-cortex-m0plus.cmake
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install ARM toolchain
         run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi
