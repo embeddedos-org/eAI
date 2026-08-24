@@ -2,6 +2,7 @@
 // Copyright (c) 2026 EoS Project
 // Tests for HAL filesystem, threading, and network subsystems
 
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>

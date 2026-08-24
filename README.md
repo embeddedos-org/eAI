@@ -1,51 +1,47 @@
 # eAI — Embedded AI
 
-[![Production Ready](https://img.shields.io/badge/Status-Production%20Ready-success?style=for-the-badge)](https://github.com/embeddedos-org/eAI)
-[![Build Status](https://img.shields.io/badge/Build-Passing-success?style=for-the-badge)](https://github.com/embeddedos-org/eAI/actions)
-[![Test Coverage](https://img.shields.io/badge/Coverage-100%25-success?style=for-the-badge)](https://github.com/embeddedos-org/eAI)
-[![GPS API](https://img.shields.io/badge/GPS%20API-Integrated-blue?style=for-the-badge)](https://github.com/embeddedos-org/eAI)
+[![CI](https://github.com/embeddedos-org/eAI/actions/workflows/ci.yml/badge.svg)](https://github.com/embeddedos-org/eAI/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-On-Device Neural Network Inference Engine. Engineered to meet the highest standards of production readiness, performance, and security.
+On-Device Neural Network Inference Engine.
 
 ---
 
-## 🚀 World-Class Simulation & Analytics
+## Simulation & Analytics
 
 ### Real-Time Emulation Dashboard
-Below is the real-time simulation dashboard generated from our production test suite. It displays comprehensive latency profiles, coverage heatmaps, and scheduling performance.
+Below is the real-time simulation dashboard generated from the test suite. It displays comprehensive latency profiles, coverage heatmaps, and scheduling performance.
 
 ![Emulation Dashboard](docs/screenshots/eai_simulation.png)
 
 ### Unified Organization Health Matrix
-We continuously benchmark eAI — Embedded AI against the entire EmbeddedOS ecosystem to ensure flawless interoperability.
+We continuously benchmark eAI — Embedded AI against the entire EmbeddedOS ecosystem to check interoperability.
 
 ![Overall Dashboard](docs/screenshots/overall_dashboard.png)
 
 ---
 
-## 🎬 Product Marketing Video (App Store Proof of Production)
+## Product Video
 
-Experience eAI — Embedded AI in action! Watch our high-fidelity product demonstration and marketing video:
+See eAI — Embedded AI in action! Watch our high-fidelity product demonstration and marketing video:
 
 > 🎥 **[Watch the eAI — Embedded AI Product Video](docs/videos/eai_marketing.mp4)**
 
 ---
 
-## 🛠️ Production-Grade Architecture
+## Architecture
 
 - **Domain**: C • NPU • INT8 Quantization
-- **GPS Integration**: Production-grade geolocation and time synchronization APIs integrated.
-- **Benchmarks**: Outperforms leading industry standards including **TensorFlow Lite Micro, ONNX Runtime**.
 
 ---
 
-## 🧪 Comprehensive Test Suite
+## Test Suite
 
-This repository features **100% test coverage** across four critical categories:
-1. **Unit Tests**: Full functional coverage of core components.
-2. **Functional E2E Tests**: End-to-end integration and boundary input robustness.
-3. **Performance Benchmarks**: Nanosecond-precision latency profiling.
-4. **Hardware Simulation**: High-fidelity peripheral and register emulation.
+The suite is organised into four categories — unit, functional end-to-end,
+performance, and hardware simulation.
+
+> Coverage is not currently measured, so no coverage figure is published here.
+> Live build status is the CI badge at the top of this file.
 
 To run the entire suite locally:
 ```bash

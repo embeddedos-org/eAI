@@ -6,6 +6,7 @@
 #include "eai/log.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #ifdef _WIN32
 #include <winsock2.h>

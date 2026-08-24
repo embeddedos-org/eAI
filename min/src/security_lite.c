@@ -2,6 +2,7 @@
 // Copyright (c) 2026 EoS Project
 // ISO/IEC 25000 | ISO/IEC/IEEE 15288:2023
 
+#include <stdlib.h>
 #include "eai_min/security_lite.h"
 #include "eai/log.h"
 
