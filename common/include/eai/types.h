@@ -35,6 +35,7 @@ typedef enum {
     EAI_ERR_DELEGATE,
     EAI_ERR_NOT_IMPLEMENTED,
     EAI_ERR_HW_UNAVAILABLE,
+    EAI_ERR_SIGNATURE,
 } eai_status_t;
 
 typedef enum {

@@ -3,6 +3,7 @@
 
 #include "eai/platform.h"
 #include <string.h>
+#include <stdio.h>
 
 #ifndef _WIN32
 
