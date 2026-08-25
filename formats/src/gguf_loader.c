@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #define LOG_MOD "gguf"
 
@@ -134,24 +135,47 @@ eai_status_t eai_gguf_load(const char *path, gguf_context_t *ctx)
         }
     }
 
-    /* Data section starts after alignment to 32 bytes */
-    long pos = ftell(fp);
-    long aligned_pos = (pos + 31) & ~31L;
-    fseek(fp, aligned_pos, SEEK_SET);
+    /* Position reached after the header/KV/tensor-info sections. */
+    long ftell_after_metadata = ftell(fp);
 
-    /* Read tensor data */
-    long data_start = ftell(fp);
-    fseek(fp, 0, SEEK_END);
+    /* Establish the true end of file first, so the data section can be
+     * bounds-checked against it. */
+    if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); eai_gguf_free(ctx); return EAI_ERR_IO; }
     long file_end = ftell(fp);
+    if (file_end < 0) { fclose(fp); eai_gguf_free(ctx); return EAI_ERR_IO; }
+
+    /* Data section starts after alignment to 32 bytes */
+    long pos = ftell_after_metadata;
+    if (pos < 0) { fclose(fp); eai_gguf_free(ctx); return EAI_ERR_IO; }
+    long aligned_pos = (pos > LONG_MAX - 31) ? file_end : ((pos + 31) & ~31L);
+
+    /* Rounding up to the alignment boundary can land past the end of a
+     * truncated file. Computing file_end - data_start unguarded then yielded a
+     * negative value that became ~1.8e19 when cast to size_t, and that value
+     * reached malloc() and stayed in ctx->data_size for every later consumer to
+     * read as a length. Treat "starts at or past EOF" as an empty data section. */
+    if (aligned_pos >= file_end) {
+        ctx->data = NULL;
+        ctx->data_size = 0;
+        fclose(fp);
+        return EAI_OK;
+    }
+
+    long data_start = aligned_pos;
     ctx->data_size = (size_t)(file_end - data_start);
 
-    if (ctx->data_size > 0) {
-        ctx->data = (uint8_t *)malloc(ctx->data_size);
-        if (ctx->data) {
-            fseek(fp, data_start, SEEK_SET);
-            fread(ctx->data, 1, ctx->data_size, fp);
-        }
+    ctx->data = (uint8_t *)malloc(ctx->data_size);
+    if (!ctx->data) { ctx->data_size = 0; fclose(fp); eai_gguf_free(ctx); return EAI_ERR_NOMEM; }
+
+    if (fseek(fp, data_start, SEEK_SET) != 0) {
+        free(ctx->data); ctx->data = NULL; ctx->data_size = 0;
+        fclose(fp); eai_gguf_free(ctx); return EAI_ERR_IO;
     }
+
+    /* Keep data_size consistent with what was actually read, so a short read
+     * cannot leave a length longer than the buffer's valid contents. */
+    size_t got = fread(ctx->data, 1, ctx->data_size, fp);
+    ctx->data_size = got;
 
     fclose(fp);
     return EAI_OK;

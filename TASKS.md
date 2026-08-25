@@ -17,7 +17,9 @@ Status is one of: `todo`, `in-progress`, `blocked`, `review`, `done`.
 
 | ID | Task | Owner | Verified by | Evidence |
 |----|------|-------|-------------|----------|
-| —  | None yet. | — | — | — |
+| T-001 | CI ran zero tests and reported success | testing | reviewer | `ci.yml` configured with `-DBUILD_TESTS=ON`, but this project's option is `EAI_BUILD_TESTS`, so no test binary was built; `ctest` exits 0 on an empty test set (verified: exit code 0). The step also ended in `|| true`, which would have discarded a real failure as well. Fixed the flag, removed `|| true`, added `--no-tests=error`. CI now builds and runs 24 tests, all passing. |
+| T-002 | Fix an integer underflow in the GGUF model-file parser | security | reviewer | `formats/src/gguf_loader.c` rounded the data-section offset up to a 32-byte boundary, which on a truncated file lands past EOF. `file_end - data_start` was then negative and cast to `size_t`, so `ctx->data_size` became 0xffffffffffffffe4 (~1.8e19). That value reached `malloc()` — ASan: `allocation-size-too-big` — and, because the `if (ctx->data)` guard left the field set, stayed in `ctx->data_size` for every later consumer to read as a length. Model files are attacker-supplied input. Now bounds-checked against EOF, with `data_size` set from the actual `fread` return so a short read cannot report more bytes than were read. `eai_format_tests` and `eai_format_ext_tests` pass under ASan/UBSan. |
+| T-003 | Fix a memory leak in the adaptive-profile test | testing | reviewer | `tests/test_adaptive.c:305` loaded the `adaptive-edge` profile, which `strdup()`s seven tool names plus a provider string, and never called `eai_config_free()`. LeakSanitizer reported the direct leaks from `config.c:153` and `:158`. 24/24 eAI tests now pass under `-fsanitize=address,undefined`. |
 
 ---
 

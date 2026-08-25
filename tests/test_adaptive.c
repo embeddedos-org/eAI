@@ -307,6 +307,8 @@ TEST(test_adaptive_profile_loading)
     assert(cfg.adaptive.lora_rank == 8);
     assert(cfg.adaptive.max_training_memory_mb == 512);
     assert(cfg.tool_count == 7);
+    /* The profile strdup()s each tool name; without this the test leaks them. */
+    eai_config_free(&cfg);
     return 0;
 }
 
