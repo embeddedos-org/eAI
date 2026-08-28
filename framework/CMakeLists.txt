@@ -14,6 +14,7 @@ add_library(eai_framework STATIC
     src/secure_boot.c
     src/supply_chain.c
     src/sensor_fusion.c
+    src/ekf.c
     src/network_security.c
     src/guardrails.c
 )
