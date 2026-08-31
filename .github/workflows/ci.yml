@@ -26,9 +26,9 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_C_COMPILER=gcc-12 \
             -DCMAKE_CXX_COMPILER=g++-12 \
-            -DBUILD_TESTS=ON
+            -DEAI_BUILD_TESTS=ON
           cmake --build build --parallel $(nproc)
-          cd build && ctest --output-on-failure || true
+          ctest --test-dir build --output-on-failure --no-tests=error
 
   # ── Python Tests ──────────────────────────────────────────────────────────
   test-python:
@@ -62,9 +62,9 @@ jobs:
       - name: Build ARM
         run: |
           cmake -B build/arm -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE=cmake/arm-cortex-m4.cmake \
-            -DBUILD_TESTS=OFF 2>/dev/null || true
-          cmake --build build/arm --parallel $(nproc) 2>/dev/null || true
+            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/toolchain-arm-cortex-m4.cmake \
+            -DEAI_BUILD_TESTS=OFF
+          cmake --build build/arm --parallel $(nproc)
           mkdir -p dist && echo "ARM build complete" > dist/build.txt
       - uses: actions/upload-artifact@v4
         with:
