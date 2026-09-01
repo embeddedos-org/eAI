@@ -87,6 +87,10 @@ add_executable(eai_test_framework test_framework.c)
 target_link_libraries(eai_test_framework PRIVATE eai_common eai_framework)
 add_test(NAME eai_framework_tests COMMAND eai_test_framework)
 
+add_executable(eai_test_ekf test_ekf.c)
+target_link_libraries(eai_test_ekf PRIVATE eai_common eai_framework)
+add_test(NAME eai_ekf_tests COMMAND eai_test_ekf)
+
 # --- test_tool: Tool registry ---
 add_executable(eai_test_tool test_tool.c)
 target_link_libraries(eai_test_tool PRIVATE eai_common)
