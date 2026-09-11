@@ -47,6 +47,13 @@
 <!-- Reference related issues: Closes #XX, Fixes #YY -->
 
 
+## Closing issue
+
+<!-- Required for human-authored pull requests. Use a GitHub closing keyword and an issue in THIS repository. Cross-repository links, plain mentions, and placeholders do not satisfy policy. -->
+
+Fixes #<same-repository issue number>
+
+
 ## Screenshots / Logs
 
 <!-- If applicable, add screenshots or relevant log output -->
