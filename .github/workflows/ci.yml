@@ -43,8 +43,15 @@ jobs:
           python-version: "3.11"
       - name: Install & test
         run: |
-          pip install pytest pytest-cov
-          pip install -r requirements.txt 2>/dev/null || true
+          # numpy is imported by tests/unit/test_unit_core.py; without it pytest
+          # exits 2 during collection. It was previously expected to arrive via
+          # requirements.txt, which does not exist in this repository.
+          pip install pytest pytest-cov numpy
+          # No `2>/dev/null || true`: a dependency install that fails must fail
+          # the job rather than leave pytest to die at collection time.
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
           python -m pytest tests/ -v --tb=short --cov=. --cov-report=xml
       - uses: codecov/codecov-action@v4
         with:
