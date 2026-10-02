@@ -15,6 +15,10 @@ target_include_directories(eai_common PUBLIC
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Generic")
+    target_compile_definitions(eai_common PUBLIC EAI_HAS_HOST_SOCKETS)
+endif()
+
 if(UNIX)
     target_link_libraries(eai_common PUBLIC m)
 endif()

@@ -62,6 +62,12 @@ if(ANDROID)
     set(EAI_PLATFORM_ANDROID ON)
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
+    set(EAI_PLATFORM_LINUX OFF)
+    set(EAI_PLATFORM_BAREMETAL ON)
+    set(EAI_BUILD_CLI OFF)
+endif()
+
 # ========== Modules ==========
 
 # Common library (shared contracts + utilities)

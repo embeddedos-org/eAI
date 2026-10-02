@@ -9,14 +9,14 @@
 #include <stdlib.h>
 #include <time.h>
 
-#ifdef _WIN32
+#if defined(EAI_HAS_HOST_SOCKETS) && defined(_WIN32)
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
 typedef SOCKET sock_t;
 #define SOCK_INVALID INVALID_SOCKET
 #define sock_close closesocket
-#else
+#elif defined(EAI_HAS_HOST_SOCKETS)
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -121,6 +121,7 @@ eai_status_t eai_tool_device_read_sensor_register(eai_tool_registry_t *reg)
 
 /* ========== http.get ========== */
 
+#ifdef EAI_HAS_HOST_SOCKETS
 static eai_status_t tool_http_get_exec(const eai_kv_t *args, int arg_count,
                                         eai_tool_result_t *result)
 {
@@ -279,6 +280,13 @@ eai_status_t eai_tool_http_get_register(eai_tool_registry_t *reg)
     tool.exec = tool_http_get_exec;
     return eai_tool_register(reg, &tool);
 }
+#else
+eai_status_t eai_tool_http_get_register(eai_tool_registry_t *reg)
+{
+    (void)reg;
+    return EAI_ERR_UNSUPPORTED;
+}
+#endif
 
 /* ========== preference.set ========== */
 
@@ -426,8 +434,10 @@ eai_status_t eai_tools_register_builtins(eai_tool_registry_t *reg)
     s = eai_tool_device_read_sensor_register(reg);
     if (s != EAI_OK) return s;
 
+#ifdef EAI_HAS_HOST_SOCKETS
     s = eai_tool_http_get_register(reg);
     if (s != EAI_OK) return s;
+#endif
 
     s = eai_tool_pref_set_register(reg);
     if (s != EAI_OK) return s;

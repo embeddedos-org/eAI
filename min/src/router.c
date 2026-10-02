@@ -8,14 +8,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef _WIN32
+#if defined(EAI_HAS_HOST_SOCKETS) && defined(_WIN32)
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
 typedef SOCKET sock_t;
 #define SOCK_INVALID INVALID_SOCKET
 #define sock_close closesocket
-#else
+#elif defined(EAI_HAS_HOST_SOCKETS)
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -73,6 +73,7 @@ eai_route_target_t eai_min_router_decide(const eai_min_router_t *router,
 }
 
 /* Parse host and port from endpoint URL */
+#ifdef EAI_HAS_HOST_SOCKETS
 static void parse_endpoint(const char *endpoint, char *host, size_t host_size,
                            int *port, char *path, size_t path_size, int *use_https)
 {
@@ -257,3 +258,14 @@ eai_status_t eai_min_router_infer_cloud(eai_min_router_t *router,
 
     return EAI_OK;
 }
+#else
+eai_status_t eai_min_router_infer_cloud(eai_min_router_t *router,
+                                         const eai_inference_input_t *in,
+                                         eai_inference_output_t *out)
+{
+    (void)router;
+    (void)in;
+    (void)out;
+    return EAI_ERR_UNSUPPORTED;
+}
+#endif

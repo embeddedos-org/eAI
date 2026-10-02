@@ -8,6 +8,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifndef EAI_HAS_HOST_SOCKETS
+static eai_status_t opcua_unsupported(eai_fw_connector_t *conn,
+                                       const eai_kv_t *params, int param_count)
+{
+    (void)conn;
+    (void)params;
+    (void)param_count;
+    return EAI_ERR_UNSUPPORTED;
+}
+
+const eai_connector_ops_t eai_connector_opcua_ops = {
+    .name    = "opcua",
+    .type    = EAI_CONN_OPCUA,
+    .connect = opcua_unsupported,
+};
+#else
+
 #ifdef _WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
@@ -284,3 +301,4 @@ const eai_connector_ops_t eai_connector_opcua_ops = {
     .write      = opcua_write,
     .subscribe  = NULL,
 };
+#endif
