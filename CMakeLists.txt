@@ -62,6 +62,15 @@ if(ANDROID)
     set(EAI_PLATFORM_ANDROID ON)
 endif()
 
+# Bare-metal cross targets (e.g. arm-none-eabi, CMAKE_SYSTEM_NAME=Generic)
+# are not a Linux host: switch to the bare-metal platform adapter and do
+# not build the host CLI.
+if(CMAKE_SYSTEM_NAME STREQUAL "Generic")
+    set(EAI_PLATFORM_LINUX OFF)
+    set(EAI_PLATFORM_BAREMETAL ON)
+    set(EAI_BUILD_CLI OFF)
+endif()
+
 # ========== Modules ==========
 
 # Common library (shared contracts + utilities)

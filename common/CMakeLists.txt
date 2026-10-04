@@ -14,6 +14,13 @@ target_include_directories(eai_common PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
+# Host socket APIs (BSD sockets / Winsock) do not exist on bare-metal
+# targets (CMAKE_SYSTEM_NAME=Generic, e.g. arm-none-eabi). Dependents
+# gate socket code on this definition; without it they compile stubs.
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Generic")
+    target_compile_definitions(eai_common PUBLIC EAI_HAS_HOST_SOCKETS)
+endif()
+
 
 if(UNIX)
     target_link_libraries(eai_common PUBLIC m)

@@ -61,19 +61,19 @@ jobs:
           submodules: recursive
       - run: sudo apt-get install -y gcc-arm-none-eabi cmake ninja-build
       - name: Build ARM
+        # No `|| true`, no stderr swallowing: a failing cross-build must
+        # fail the job (issue #47). The toolchain path is the canonical
+        # cmake/toolchains/ one; EAI_BUILD_TESTS is the real option name.
         run: |
           cmake -B build/arm -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE=cmake/arm-cortex-m4.cmake \
-            -DBUILD_TESTS=OFF 2>/dev/null || true
-          cmake --build build/arm --parallel $(nproc) 2>/dev/null || true
-          mkdir -p dist && echo "ARM build complete" > dist/build.txt
+            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/toolchain-arm-cortex-m4.cmake \
+            -DEAI_BUILD_TESTS=OFF
+          cmake --build build/arm --parallel $(nproc)
       - uses: actions/upload-artifact@v4
         with:
           name: eai-arm
-          path: |
-            build/arm/**/*.elf
-            build/arm/**/*.bin
-            dist/
+          path: build/arm/**/*.a
+          if-no-files-found: error
           retention-days: 90
 
   # ── Release ───────────────────────────────────────────────────────────────
