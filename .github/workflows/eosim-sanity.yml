@@ -67,8 +67,10 @@ jobs:
       - name: Simulate ${{ matrix.platform }}
         shell: bash
         run: |
-          # Honest EoSim engine contracts (v3.0.2+):
-          # - qemu engine: "via qemu" + "PASSED (dry run)", exit 0 (EoSim#38).
+          # Honest EoSim engine contracts (EoSim 4db3434a fixed #38):
+          # - qemu engine: qemu not installed -> "QEMU NOT INSTALLED", exit 2
+          #   (reported as SKIP); qemu installed -> it actually executes and
+          #   its exit code propagates. Never PASSED without execution.
           # - native engine: "NO FIRMWARE", exit 2 (no fake pass over zeroed
           #   memory). Real firmware execution needs a built image.
           set +e
@@ -77,9 +79,14 @@ jobs:
           set -e
           echo "$out"
           if echo "$out" | grep -q "via qemu"; then
-            echo "$out" | grep -q "PASSED (dry run)" || { echo "::error::expected the qemu dry-run message (EoSim#38)"; exit 1; }
-            [ "$code" -eq 0 ] || { echo "::error::expected exit 0, got $code"; exit 1; }
-            echo "${{ matrix.platform }}: PASSED (qemu dry-run; see EoSim#38)"
+            if echo "$out" | grep -q "QEMU NOT INSTALLED"; then
+              [ "$code" -eq 2 ] || { echo "::error::expected exit 2, got $code"; exit 1; }
+              echo "${{ matrix.platform }}: SKIP (qemu not installed)"
+            else
+              [ "$code" -eq 0 ] || { echo "::error::qemu executed but failed, exit $code"; exit 1; }
+              echo "$out" | grep -q "PASSED" || { echo "::error::expected the PASSED contract message"; exit 1; }
+              echo "${{ matrix.platform }}: PASSED (qemu executed)"
+            fi
           else
             echo "$out" | grep -q "NO FIRMWARE" || { echo "::error::expected the NO FIRMWARE contract message"; exit 1; }
             [ "$code" -eq 2 ] || { echo "::error::expected exit 2, got $code"; exit 1; }
@@ -113,8 +120,10 @@ jobs:
         shell: bash
         run: |
           echo "=== Nested Guest: ${{ matrix.guest }} ==="
-          # Honest EoSim engine contracts (v3.0.2+):
-          # - qemu engine: "via qemu" + "PASSED (dry run)", exit 0 (EoSim#38).
+          # Honest EoSim engine contracts (EoSim 4db3434a fixed #38):
+          # - qemu engine: qemu not installed -> "QEMU NOT INSTALLED", exit 2
+          #   (reported as SKIP); qemu installed -> it actually executes and
+          #   its exit code propagates. Never PASSED without execution.
           # - native engine: "NO FIRMWARE", exit 2 (no fake pass over zeroed
           #   memory). Real firmware execution needs a built image.
           set +e
@@ -123,9 +132,14 @@ jobs:
           set -e
           echo "$out"
           if echo "$out" | grep -q "via qemu"; then
-            echo "$out" | grep -q "PASSED (dry run)" || { echo "::error::expected the qemu dry-run message (EoSim#38)"; exit 1; }
-            [ "$code" -eq 0 ] || { echo "::error::expected exit 0, got $code"; exit 1; }
-            echo "${{ matrix.guest }}: PASSED (qemu dry-run; see EoSim#38)"
+            if echo "$out" | grep -q "QEMU NOT INSTALLED"; then
+              [ "$code" -eq 2 ] || { echo "::error::expected exit 2, got $code"; exit 1; }
+              echo "${{ matrix.guest }}: SKIP (qemu not installed)"
+            else
+              [ "$code" -eq 0 ] || { echo "::error::qemu executed but failed, exit $code"; exit 1; }
+              echo "$out" | grep -q "PASSED" || { echo "::error::expected the PASSED contract message"; exit 1; }
+              echo "${{ matrix.guest }}: PASSED (qemu executed)"
+            fi
           else
             echo "$out" | grep -q "NO FIRMWARE" || { echo "::error::expected the NO FIRMWARE contract message"; exit 1; }
             [ "$code" -eq 2 ] || { echo "::error::expected exit 2, got $code"; exit 1; }
