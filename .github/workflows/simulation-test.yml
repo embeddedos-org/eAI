@@ -35,7 +35,26 @@ jobs:
       - name: Validate platform
         run: eosim list
       - name: Run simulation
-        run: eosim run ${{ matrix.platform }} --headless --timeout 15
+        shell: bash
+        run: |
+          # Honest EoSim engine contracts (v3.0.2+):
+          # - qemu engine: "via qemu" + "PASSED (dry run)", exit 0 (EoSim#38).
+          # - native engine: "NO FIRMWARE", exit 2 (no fake pass over zeroed
+          #   memory). Real firmware execution needs a built image.
+          set +e
+          out=$(eosim run ${{ matrix.platform }} --headless --timeout 15 2>&1)
+          code=$?
+          set -e
+          echo "$out"
+          if echo "$out" | grep -q "via qemu"; then
+            echo "$out" | grep -q "PASSED (dry run)" || { echo "::error::expected the qemu dry-run message (EoSim#38)"; exit 1; }
+            [ "$code" -eq 0 ] || { echo "::error::expected exit 0, got $code"; exit 1; }
+            echo "${{ matrix.platform }}: PASSED (qemu dry-run; see EoSim#38)"
+          else
+            echo "$out" | grep -q "NO FIRMWARE" || { echo "::error::expected the NO FIRMWARE contract message"; exit 1; }
+            [ "$code" -eq 2 ] || { echo "::error::expected exit 2, got $code"; exit 1; }
+            echo "${{ matrix.platform }}: PASSED (no-firmware contract)"
+          fi
 
   cross-platform:
     name: Cross-Platform (${{ matrix.os }})
