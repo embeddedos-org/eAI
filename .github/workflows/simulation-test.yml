@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  EOSIM_VERSION: "0.1.0"
+  EOSIM_VERSION: "3.0.2"
 
 permissions:
   contents: read
