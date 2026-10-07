@@ -54,7 +54,7 @@ jobs:
 
           # --- macOS x64 (Apple Clang) ---
           - name: macos-x64
-            os: macos-13
+            os: macos-15-intel
             cc: clang
             extra_cmake: "-DEAI_PLATFORM_MACOS=ON"
 
