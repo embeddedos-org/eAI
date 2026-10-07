@@ -79,3 +79,38 @@ ways:
 module set maps onto backend modules. Gaps for M1 (enumerated in the eosllm
 doc): envelope verification in the loader, arena allocator, capability
 plumbing from manifest to `eai_infer`.
+
+---
+
+## Power-aware model selection: tokens-per-watt (2026-10-07)
+
+The power-aware selection path scores candidate models in
+**tokens-per-watt**, not TOPS. (Context: the Dimensity 9600 dual-NPU split
+reports +55% tokens/watt for the efficiency tier — tokens-per-watt is the
+metric that makes the always-on tier selectable; see the eos
+accelerator-HAL profiles note, same date.)
+
+### Reference targets: Alif StartKit SK-E1C and SK-B1
+
+The first reference demo targets for power-aware selection are named
+explicitly so selection behavior can be validated on real hardware:
+
+- **Alif StartKit SK-E1C** — Cortex-M55 + Ethos-U55, 2 MB SRAM, Arducam
+  header, dual PDM mics, onboard Segger J-Link. Cheap, debugger-included
+  tinyML target; the Ethos-U55 is the selection path's first real
+  accelerator backend.
+- **Alif StartKit SK-B1** — same platform, adds BLE 5.3 + 802.15.4 radios.
+  Use it for the always-on sensing demo: sensing on the efficiency path,
+  radios exercised against the low-power selection profile.
+
+Both are debugger-included and cheap enough to hand to contributors — the
+reference demo should run on hardware a community member can actually buy.
+
+### Always-on tier: separate selection path
+
+Efficiency-NPU-class workloads (always-on sensing, keyword invocation,
+scheduling) get a **separate low-power selection path**, not a downclocked
+variant of the performance path. The selector maintains two ranked candidate
+lists — performance and always-on — because a model that wins in TOPS can
+lose in tokens-per-watt, and the power state, not the peak score, decides
+which list is consulted.
