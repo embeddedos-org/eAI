@@ -53,3 +53,6 @@ Notes:
   TinyEngine-NPU MCUs (MSPM0G5187 / AM13Ex) are March 2026 parts — valid
   roster targets, but not new this week; they get full rows when a board
   using them enters the board queue, not before.
+- The delegate-shaped HAL interface that binds pinned models to these
+  parts' backends is specified in
+  [`accelerator-hal-delegate.md`](accelerator-hal-delegate.md).
