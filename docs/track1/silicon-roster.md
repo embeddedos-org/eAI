@@ -35,6 +35,8 @@ Notes:
 | Ezurio BL54LM20A/B modules | On-chip neural accelerator | nRF54LM20: M33 + RISC-V @ 128 MHz, 2 MB / 512 KB, BLE 6.x, Thread/Matter, NFC, PSA L3 | MCU ternary tier with neural accelerator; Zephyr-first (nRF Connect SDK) — a module-level HAL reference | Modules announced Oct 2026 |
 | Nuvoton NuMaker-GestureAI-M55M1 kit | Ethos-U55 @ 220 MHz, 111 GOPS | Cortex-M55 @ 220 MHz, 1.5 MB SRAM / 2 MB flash, TrustZone, PSA L2; kit: GC0308 camera + digital mic + microSD | MCU ternary tier — **the Ethos-U55 reference NPU** for the accelerator HAL (cheapest credible Ethos-U55 board) | Kit, Oct 2026 |
 | Nuvoton MA35D0 "Chili Pro" | No NPU | Dual Cortex-A35 @ 650 MHz + Cortex-M4 @ 180 MHz, RJ45/USB, 45×45 mm | Application-processor heterogeneous tier (A-class + M-class split mirrors eos service placement) | Eval board, Oct 2026 |
+| MediaTek Genio 720 (MT8391) — DEBIX M8391-01 SBC | NPU850 @ 9 TOPS; TrustZone + secure boot | 2× Cortex-A78 @ 2.6 GHz + 6× Cortex-A55, 4/8/16 GB LPDDR4, industrial −40…85 °C variant, 85×56 mm | Application-processor tier — the mid-range NPU850 reference for the accelerator HAL delegate table (see `accelerator-hal-delegate.md`); TrustZone + secure boot make it eligible for signed-model, capability-scoped inference | Announced Oct 5 2026 (CNX) |
+| Amlogic A311Y3 | 8 TOPS NPU | Edge SoC (CPU complex not yet published in the demo report) | Application-processor tier; demonstrated as EtherCAT master in HPMicro's CIIF 2026 humanoid-joint demo — the motion-control angle is recorded in eos-aero's silicon targets; here it is the NPU roster entry | Announced Oct 13 2026 (CIIF) |
 
 Evidence: electronicdesign.com (Ara240, Mouser shipping notice Oct 5 2026);
 electronics-lab.com (nRF54LC10A, BL54LM20); cnx-software.com (M55M1 kit,
