@@ -1,0 +1,27 @@
+# eAI
+
+> llms.txt for the eAI repository (embeddedos-org/eAI).
+> Status: the AI layer for EmbeddedOS — on-device inference
+> runtime, model handling, and the Track 1 tightly-coupled AI
+> design work (accelerator HAL, silicon roster, runtime API).
+
+eAI is the intelligence layer of the EmbeddedOS ecosystem: the
+inference runtime and AI services that eos, eosllm, eNI and eApps
+build on, designed for constrained devices (arena allocation,
+power-aware model selection) rather than ported from the cloud.
+
+## Docs
+
+- [eAI runtime API: the on-device inference service](docs/track1/runtime-api.md)
+- [Track 1: silicon roster](docs/track1/silicon-roster.md)
+- [Track 1: accelerator HAL delegate interface](docs/track1/accelerator-hal-delegate.md)
+- [Track 1: accelerator-HAL ternary tier](docs/track1/accelerator-hal-ternary-tier.md)
+- [Federated learning on the edge (Track 1, phase 3)](docs/track1/federated-learning-edge.md)
+- [eAI Porting Guide](docs/porting-guide.md)
+- [eAI BCI Architecture](docs/bci/architecture.md)
+- [Getting Started with eAI BCI](docs/bci/getting_started.md)
+
+## Machine-readable
+
+- [llms.txt](llms.txt) — this file
+- [llms-full.txt](llms-full.txt) — the docs above concatenated as one document
