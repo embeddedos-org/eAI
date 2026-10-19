@@ -163,5 +163,5 @@ class TestRecipeMethods(unittest.TestCase):
                          ["eai_common", "eai_platform", "eai_accel", "eai_bci"])
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     unittest.main()

@@ -182,5 +182,5 @@ class TestNPUPipeline(unittest.TestCase):
         self.assertEqual(result.shape, (3, embed_dim))
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     unittest.main()
