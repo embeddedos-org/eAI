@@ -32,6 +32,21 @@ static void test_config_init(void)
     PASS();
 }
 
+static void test_bci_assistive_profile(void)
+{
+    TEST(bci_assistive_profile);
+    eai_config_t cfg;
+    eai_config_init(&cfg);
+    eai_status_t st = eai_config_load_profile(&cfg, "bci-assistive");
+    if (st != EAI_OK) { eai_config_free(&cfg); FAIL("load bci-assistive failed"); return; }
+    if (cfg.variant != EAI_VARIANT_MIN) { eai_config_free(&cfg); FAIL("wrong variant"); return; }
+    if (cfg.mode != EAI_MODE_LOCAL) { eai_config_free(&cfg); FAIL("wrong mode"); return; }
+    if (cfg.policy.cloud_fallback != false) { eai_config_free(&cfg); FAIL("wrong cloud_fallback"); return; }
+    if (cfg.observability != true) { eai_config_free(&cfg); FAIL("wrong observability"); return; }
+    eai_config_free(&cfg);
+    PASS();
+}
+
 static void test_tool_registry(void)
 {
     TEST(tool_registry);
@@ -127,6 +142,7 @@ int main(void)
     printf("=== EAI Common Tests ===\n\n");
 
     test_config_init();
+    test_bci_assistive_profile();
     test_tool_registry();
     test_tool_exec();
     test_security_ctx();

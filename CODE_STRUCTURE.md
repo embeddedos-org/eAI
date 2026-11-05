@@ -102,7 +102,9 @@ EAI/
 │   ├── smart-camera/profile.yaml
 │   ├── industrial-gateway/profile.yaml
 │   ├── robot-controller/profile.yaml
-│   └── mobile-edge/profile.yaml
+│   ├── mobile-edge/profile.yaml
+│   ├── adaptive-edge/profile.yaml
+│   └── bci-assistive/profile.yaml
 │
 └── tests/
     └── CMakeLists.txt             # Test harness placeholder
@@ -197,6 +199,8 @@ eai_config_dump(&cfg);                                // print to stdout
 | `industrial-gateway` | framework | local | onnxruntime, llama.cpp| mqtt, opcua, modbus| mqtt.publish, device.read_sensor, http.get  |
 | `robot-controller`   | framework | local | onnxruntime, tflite   | can, mqtt          | device.read_sensor, mqtt.publish            |
 | `mobile-edge`        | min       | hybrid| llama.cpp             | —                  | http.get, device.read_sensor                |
+| `adaptive-edge`      | framework | hybrid| llama.cpp             | mqtt               | device.read_sensor, http.get, mqtt.publish, preference.set, preference.get, feedback.record, model.status |
+| `bci-assistive`      | min       | local | —                     | —                  | —                                           |
 
 ### log.h / log.c — Logging
 
