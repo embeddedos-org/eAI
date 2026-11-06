@@ -83,13 +83,20 @@ add_executable(eai_test_min test_min.c)
 target_link_libraries(eai_test_min PRIVATE eai_common eai_min)
 add_test(NAME eai_min_tests COMMAND eai_test_min)
 
-add_executable(eai_test_framework test_framework.c)
-target_link_libraries(eai_test_framework PRIVATE eai_common eai_framework)
-add_test(NAME eai_framework_tests COMMAND eai_test_framework)
+# Framework tests only exist when the framework module is built (the
+# Android NDK job configures with -DEAI_BUILD_FRAMEWORK=OFF, so the
+# eai_framework target -- and its PUBLIC include dir carrying eai_fw/* --
+# never exists there; building these tests unconditionally fails with
+# 'eai_fw/eai_framework.h' file not found).
+if(EAI_BUILD_FRAMEWORK)
+    add_executable(eai_test_framework test_framework.c)
+    target_link_libraries(eai_test_framework PRIVATE eai_common eai_framework)
+    add_test(NAME eai_framework_tests COMMAND eai_test_framework)
 
-add_executable(eai_test_ekf test_ekf.c)
-target_link_libraries(eai_test_ekf PRIVATE eai_common eai_framework)
-add_test(NAME eai_ekf_tests COMMAND eai_test_ekf)
+    add_executable(eai_test_ekf test_ekf.c)
+    target_link_libraries(eai_test_ekf PRIVATE eai_common eai_framework)
+    add_test(NAME eai_ekf_tests COMMAND eai_test_ekf)
+endif()
 
 # --- test_tool: Tool registry ---
 add_executable(eai_test_tool test_tool.c)
