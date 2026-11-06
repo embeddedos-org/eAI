@@ -60,7 +60,7 @@ extern const eai_hal_core_ops_t eai_hal_windows_core_ops;
 extern const eai_hal_memory_ops_t eai_hal_windows_memory_ops;
 #define HAL_CORE eai_hal_windows_core_ops
 #define HAL_MEM  eai_hal_windows_memory_ops
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
 extern const eai_hal_core_ops_t eai_hal_linux_core_ops;
 extern const eai_hal_memory_ops_t eai_hal_linux_memory_ops;
 #define HAL_CORE eai_hal_linux_core_ops
