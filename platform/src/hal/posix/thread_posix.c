@@ -4,13 +4,14 @@
 #include "eai/platform.h"
 #include <pthread.h>
 #include <stdlib.h>
+#include <semaphore.h>
 #ifdef __APPLE__
 /* macOS does not support unnamed POSIX semaphores: sem_init always fails
-   with ENOSYS. Use a GCD dispatch semaphore instead (libdispatch, no
-   extra link dependency). */
-#include <dispatch/dispatch.h>
-#else
-#include <semaphore.h>
+   with ENOSYS (and is deprecated). Use named semaphores via sem_open;
+   each handle carries its unique name so destroy can unlink it. */
+#include <fcntl.h>
+#include <stdio.h>
+#include <unistd.h>
 #endif
 
 #ifndef _WIN32
@@ -81,13 +82,28 @@ static void posix_mutex_destroy(eai_mutex_t mutex)
     if (m) { pthread_mutex_destroy(m); free(m); }
 }
 
+#ifdef __APPLE__
+typedef struct {
+    sem_t *handle;
+    char name[64];
+} apple_semaphore_t;
+
+static unsigned int apple_sem_counter = 0;
+
+#endif
+
 static eai_status_t posix_semaphore_create(eai_semaphore_t *sem, int initial)
 {
 #ifdef __APPLE__
     if (initial < 0) return EAI_ERR_INVALID;
-    dispatch_semaphore_t ds = dispatch_semaphore_create(initial);
-    if (!ds) return EAI_ERR_NOMEM;
-    *sem = (eai_semaphore_t)ds;
+    apple_semaphore_t *a = (apple_semaphore_t *)malloc(sizeof(*a));
+    if (!a) return EAI_ERR_NOMEM;
+    /* Unique per-process name; O_EXCL guards against stale names. */
+    unsigned int n = (unsigned int)__sync_fetch_and_add(&apple_sem_counter, 1);
+    snprintf(a->name, sizeof(a->name), "/eai_sem_%d_%u", (int)getpid(), n);
+    a->handle = sem_open(a->name, O_CREAT | O_EXCL, 0600, (unsigned int)initial);
+    if (a->handle == SEM_FAILED) { free(a); return EAI_ERR_RUNTIME; }
+    *sem = (eai_semaphore_t)a;
     return EAI_OK;
 #else
     sem_t *s = (sem_t *)malloc(sizeof(sem_t));
@@ -101,11 +117,9 @@ static eai_status_t posix_semaphore_create(eai_semaphore_t *sem, int initial)
 static eai_status_t posix_semaphore_wait(eai_semaphore_t sem)
 {
 #ifdef __APPLE__
-    if (!sem) return EAI_ERR_INVALID;
-    return (dispatch_semaphore_wait((dispatch_semaphore_t)sem,
-                                    DISPATCH_TIME_FOREVER) == 0)
-               ? EAI_OK
-               : EAI_ERR_RUNTIME;
+    apple_semaphore_t *a = (apple_semaphore_t *)sem;
+    if (!a) return EAI_ERR_INVALID;
+    return (sem_wait(a->handle) == 0) ? EAI_OK : EAI_ERR_RUNTIME;
 #else
     return (sem_wait((sem_t *)sem) == 0) ? EAI_OK : EAI_ERR_RUNTIME;
 #endif
@@ -114,11 +128,9 @@ static eai_status_t posix_semaphore_wait(eai_semaphore_t sem)
 static eai_status_t posix_semaphore_post(eai_semaphore_t sem)
 {
 #ifdef __APPLE__
-    if (!sem) return EAI_ERR_INVALID;
-    /* dispatch_semaphore_signal returns nonzero when it wakes a waiter;
-       either way the post succeeded. */
-    dispatch_semaphore_signal((dispatch_semaphore_t)sem);
-    return EAI_OK;
+    apple_semaphore_t *a = (apple_semaphore_t *)sem;
+    if (!a) return EAI_ERR_INVALID;
+    return (sem_post(a->handle) == 0) ? EAI_OK : EAI_ERR_RUNTIME;
 #else
     return (sem_post((sem_t *)sem) == 0) ? EAI_OK : EAI_ERR_RUNTIME;
 #endif
@@ -127,7 +139,12 @@ static eai_status_t posix_semaphore_post(eai_semaphore_t sem)
 static void posix_semaphore_destroy(eai_semaphore_t sem)
 {
 #ifdef __APPLE__
-    if (sem) dispatch_release((dispatch_semaphore_t)sem);
+    apple_semaphore_t *a = (apple_semaphore_t *)sem;
+    if (a) {
+        sem_close(a->handle);
+        sem_unlink(a->name);
+        free(a);
+    }
 #else
     sem_t *s = (sem_t *)sem;
     if (s) { sem_destroy(s); free(s); }
