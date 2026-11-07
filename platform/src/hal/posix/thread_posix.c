@@ -4,7 +4,14 @@
 #include "eai/platform.h"
 #include <pthread.h>
 #include <stdlib.h>
+#ifdef __APPLE__
+/* macOS does not support unnamed POSIX semaphores: sem_init always fails
+   with ENOSYS. Use a GCD dispatch semaphore instead (libdispatch, no
+   extra link dependency). */
+#include <dispatch/dispatch.h>
+#else
 #include <semaphore.h>
+#endif
 
 #ifndef _WIN32
 
@@ -76,27 +83,55 @@ static void posix_mutex_destroy(eai_mutex_t mutex)
 
 static eai_status_t posix_semaphore_create(eai_semaphore_t *sem, int initial)
 {
+#ifdef __APPLE__
+    if (initial < 0) return EAI_ERR_INVALID;
+    dispatch_semaphore_t ds = dispatch_semaphore_create(initial);
+    if (!ds) return EAI_ERR_NOMEM;
+    *sem = (eai_semaphore_t)ds;
+    return EAI_OK;
+#else
     sem_t *s = (sem_t *)malloc(sizeof(sem_t));
     if (!s) return EAI_ERR_NOMEM;
     if (sem_init(s, 0, initial) != 0) { free(s); return EAI_ERR_RUNTIME; }
     *sem = (eai_semaphore_t)s;
     return EAI_OK;
+#endif
 }
 
 static eai_status_t posix_semaphore_wait(eai_semaphore_t sem)
 {
+#ifdef __APPLE__
+    if (!sem) return EAI_ERR_INVALID;
+    return (dispatch_semaphore_wait((dispatch_semaphore_t)sem,
+                                    DISPATCH_TIME_FOREVER) == 0)
+               ? EAI_OK
+               : EAI_ERR_RUNTIME;
+#else
     return (sem_wait((sem_t *)sem) == 0) ? EAI_OK : EAI_ERR_RUNTIME;
+#endif
 }
 
 static eai_status_t posix_semaphore_post(eai_semaphore_t sem)
 {
+#ifdef __APPLE__
+    if (!sem) return EAI_ERR_INVALID;
+    /* dispatch_semaphore_signal returns nonzero when it wakes a waiter;
+       either way the post succeeded. */
+    dispatch_semaphore_signal((dispatch_semaphore_t)sem);
+    return EAI_OK;
+#else
     return (sem_post((sem_t *)sem) == 0) ? EAI_OK : EAI_ERR_RUNTIME;
+#endif
 }
 
 static void posix_semaphore_destroy(eai_semaphore_t sem)
 {
+#ifdef __APPLE__
+    if (sem) dispatch_release((dispatch_semaphore_t)sem);
+#else
     sem_t *s = (sem_t *)sem;
     if (s) { sem_destroy(s); free(s); }
+#endif
 }
 
 const eai_hal_thread_ops_t eai_hal_posix_thread_ops = {
