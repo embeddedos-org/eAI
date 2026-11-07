@@ -18,7 +18,7 @@ extern const eai_hal_timer_ops_t eai_hal_windows_timer_ops;
 #define CORE_OPS   eai_hal_windows_core_ops
 #define MEM_OPS    eai_hal_windows_memory_ops
 #define TIMER_OPS  eai_hal_windows_timer_ops
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
 extern const eai_hal_core_ops_t eai_hal_linux_core_ops;
 extern const eai_hal_memory_ops_t eai_hal_linux_memory_ops;
 extern const eai_hal_timer_ops_t eai_hal_posix_timer_ops;
