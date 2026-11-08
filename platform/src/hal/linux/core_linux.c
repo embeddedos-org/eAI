@@ -10,7 +10,11 @@
 #define LOG_MOD "hal-linux-core"
 
 #ifndef _WIN32
-#ifdef __linux__
+/* macOS falls back to the Linux ops until a macOS adapter exists
+   (see eai_platform_detect in platform.c); the implementation below
+   uses only POSIX calls, and the Linux-only paths degrade gracefully
+   (/etc/os-release and /sys/class/thermal are absent on macOS). */
+#if defined(__linux__) || defined(__APPLE__)
 
 static eai_status_t linux_hal_init(eai_platform_t *plat)
 {
@@ -84,5 +88,5 @@ const eai_hal_core_ops_t eai_hal_linux_core_ops = {
     .get_cpu_count   = linux_hal_get_cpu_count,
 };
 
-#endif /* __linux__ */
+#endif /* __linux__ || __APPLE__ */
 #endif /* !_WIN32 */

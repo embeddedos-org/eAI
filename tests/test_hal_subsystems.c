@@ -2,7 +2,9 @@
 // Copyright (c) 2026 EoS Project
 // Tests for HAL filesystem, threading, and network subsystems
 
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -17,7 +19,7 @@ static int tests_run = 0, tests_passed = 0, tests_failed = 0;
 #ifdef _WIN32
 extern const eai_hal_fs_ops_t eai_hal_windows_fs_ops;
 #define FS_OPS eai_hal_windows_fs_ops
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
 extern const eai_hal_fs_ops_t eai_hal_posix_fs_ops;
 #define FS_OPS eai_hal_posix_fs_ops
 #endif
@@ -26,7 +28,7 @@ extern const eai_hal_fs_ops_t eai_hal_posix_fs_ops;
 #ifdef _WIN32
 extern const eai_hal_thread_ops_t eai_hal_windows_thread_ops;
 #define THREAD_OPS eai_hal_windows_thread_ops
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
 extern const eai_hal_thread_ops_t eai_hal_posix_thread_ops;
 #define THREAD_OPS eai_hal_posix_thread_ops
 #endif
@@ -35,7 +37,7 @@ extern const eai_hal_thread_ops_t eai_hal_posix_thread_ops;
 #ifdef _WIN32
 extern const eai_hal_net_ops_t eai_hal_windows_net_ops;
 #define NET_OPS eai_hal_windows_net_ops
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__APPLE__)
 extern const eai_hal_net_ops_t eai_hal_posix_net_ops;
 #define NET_OPS eai_hal_posix_net_ops
 #endif
