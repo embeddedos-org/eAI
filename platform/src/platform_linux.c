@@ -13,6 +13,9 @@
 
 #ifdef __linux__
 #include <sys/sysinfo.h>
+#elif defined(__APPLE__)
+#include <mach/mach.h>
+#include <sys/sysctl.h>
 #endif
 #include <unistd.h>
 
@@ -50,6 +53,11 @@ static eai_status_t linux_get_device_info(eai_platform_t *plat, char *buf, size_
 
 static eai_status_t linux_read_gpio(eai_platform_t *plat, int pin, int *value)
 {
+#ifdef __APPLE__
+    /* No /sys/class/gpio on macOS; desktop GPIO is unsupported. */
+    (void)plat; (void)pin; (void)value;
+    return EAI_ERR_UNSUPPORTED;
+#endif
     char path[128];
     snprintf(path, sizeof(path), "/sys/class/gpio/gpio%d/value", pin);
     FILE *fp = fopen(path, "r");
@@ -64,6 +72,10 @@ static eai_status_t linux_read_gpio(eai_platform_t *plat, int pin, int *value)
 
 static eai_status_t linux_write_gpio(eai_platform_t *plat, int pin, int value)
 {
+#ifdef __APPLE__
+    (void)plat; (void)pin; (void)value;
+    return EAI_ERR_UNSUPPORTED;
+#endif
     char path[128];
     snprintf(path, sizeof(path), "/sys/class/gpio/gpio%d/value", pin);
     FILE *fp = fopen(path, "w");
@@ -82,10 +94,30 @@ static eai_status_t linux_get_memory_info(eai_platform_t *plat,
     if (total)     *total     = (uint64_t)si.totalram * si.mem_unit;
     if (available) *available = (uint64_t)si.freeram  * si.mem_unit;
     return EAI_OK;
-#else
-    if (total)     *total     = 0;
-    if (available) *available = 0;
-    return EAI_ERR_UNSUPPORTED;
+#elif defined(__APPLE__)
+    /* macOS has no sysinfo(2): total from hw.memsize, available from
+       vm_statistics64 (free + inactive pages). Same values as the
+       HAL memory ops in memory_linux.c. */
+    (void)plat;
+    if (total) {
+        int64_t phys_mem = 0;
+        size_t len = sizeof(phys_mem);
+        if (sysctlbyname("hw.memsize", &phys_mem, &len, NULL, 0) != 0)
+            return EAI_ERR_IO;
+        *total = (uint64_t)phys_mem;
+    }
+    if (available) {
+        vm_statistics64_data_t vm_stat;
+        memset(&vm_stat, 0, sizeof(vm_stat));
+        mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+        if (host_statistics64(mach_host_self(), HOST_VM_INFO64,
+                              (host_info64_t)&vm_stat, &count) != KERN_SUCCESS)
+            return EAI_ERR_IO;
+        vm_size_t page_size = 0;
+        host_page_size(mach_host_self(), &page_size);
+        *available = (uint64_t)(vm_stat.free_count + vm_stat.inactive_count) * page_size;
+    }
+    return EAI_OK;
 #endif
 }
 

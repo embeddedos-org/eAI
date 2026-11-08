@@ -63,7 +63,7 @@ static eai_status_t posix_recv(eai_socket_t sock, void *buf, size_t buf_size, si
     return EAI_OK;
 }
 
-static void posix_close(eai_socket_t sock)
+static void posix_net_close(eai_socket_t sock)
 {
     close(sock_fd(sock));
 }
@@ -88,7 +88,7 @@ const eai_hal_net_ops_t eai_hal_posix_net_ops = {
     .connect       = posix_connect,
     .send          = posix_send,
     .recv          = posix_recv,
-    .close         = posix_close,
+    .close         = posix_net_close,
     .dns_resolve   = posix_dns_resolve,
 };
 
