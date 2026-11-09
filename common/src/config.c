@@ -168,6 +168,12 @@ eai_status_t eai_config_load_profile(eai_config_t *cfg, const char *profile_name
         cfg->adaptive.train_during_idle = true;
         cfg->adaptive.max_training_steps_per_cycle = 100;
     }
+    else if (strcmp(profile_name, "bci-assistive") == 0) {
+        cfg->variant = EAI_VARIANT_MIN;
+        cfg->mode    = EAI_MODE_LOCAL;
+        cfg->policy.cloud_fallback = false;
+        cfg->observability = true;
+    }
     else {
         EAI_LOG_WARN(LOG_MOD, "unknown profile: %s", profile_name);
         return EAI_ERR_NOT_FOUND;
