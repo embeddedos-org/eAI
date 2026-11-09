@@ -133,11 +133,13 @@ eai_status_t eai_min_router_infer_cloud(eai_min_router_t *router,
                    &port, path, sizeof(path), &use_https);
 
     if (use_https) {
-        EAI_LOG_WARN(LOG_MOD, "HTTPS requested but minimal build lacks TLS. Falling back to HTTP (INSECURE)");
-        port = 80;
-    } else {
-        EAI_LOG_WARN(LOG_MOD, "Using unencrypted HTTP for cloud inference (INSECURE)");
+        /* No TLS in the minimal build. Never fall back to plain HTTP for an
+         * https:// endpoint: the request carries the Bearer API key. */
+        EAI_LOG_ERROR(LOG_MOD, "HTTPS endpoint requested but the minimal build has no TLS; "
+                      "refusing to send the request over plain HTTP");
+        return EAI_ERR_UNSUPPORTED;
     }
+    EAI_LOG_WARN(LOG_MOD, "Using unencrypted HTTP for cloud inference (INSECURE)");
 
 #ifdef _WIN32
     WSADATA wsa;
