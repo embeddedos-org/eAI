@@ -38,7 +38,6 @@ static void print_usage(const char *prog)
     printf("  version          Show version information\n");
     printf("  bench            Run inference benchmarks\n");
     printf("  convert          Convert model formats\n");
-    printf("  profile <name>   Load a deployment profile\n");
     printf("  help             Show this help message\n");
     printf("\n");
     printf("Profiles:\n");
@@ -46,6 +45,8 @@ static void print_usage(const char *prog)
     printf("  industrial-gateway Full industrial IoT gateway\n");
     printf("  robot-controller   Real-time robotics control\n");
     printf("  mobile-edge        Lightweight mobile deployment\n");
+    printf("  adaptive-edge      Edge AI with adaptive personalization\n");
+    printf("  bci-assistive      BCI assistive device deployment\n");
     printf("\n");
     printf("Examples:\n");
     printf("  %s run\n", prog);
@@ -121,6 +122,7 @@ static int cmd_profile(const char *profile_name)
     print_banner();
     printf("Profile: %s\n\n", profile_name);
     eai_config_dump(&cfg);
+    eai_config_free(&cfg);
     return 0;
 }
 
@@ -274,7 +276,9 @@ int main(int argc, char *argv[])
             }
         }
 
-        return cmd_run(&cfg);
+        int rc = cmd_run(&cfg);
+        eai_config_free(&cfg);
+        return rc;
     }
     if (strcmp(cmd, "serve") == 0) {
 #ifdef EAI_EIPC_ENABLED
@@ -353,6 +357,7 @@ int main(int argc, char *argv[])
         }
         print_banner();
         eai_config_dump(&cfg);
+        eai_config_free(&cfg);
         return 0;
     }
 
