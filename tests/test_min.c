@@ -54,6 +54,43 @@ static void test_router_mode(void)
     PASS();
 }
 
+/* The minimal build has no TLS. An https:// cloud endpoint used to be
+ * downgraded to plain HTTP on port 80 while the "Authorization: Bearer"
+ * header was still sent, leaking the API key in cleartext. The router must
+ * refuse the request instead. 127.0.0.1 keeps the old behaviour local: it
+ * tried 127.0.0.1:80 and returned a connect error, never UNSUPPORTED. */
+static void test_cloud_https_not_downgraded(void)
+{
+    TEST(cloud_https_not_downgraded);
+#ifdef EAI_HAS_HOST_SOCKETS
+    eai_min_router_t router;
+    eai_min_router_init(&router, EAI_ROUTE_CLOUD);
+    eai_min_router_set_cloud(&router, "https://127.0.0.1/v1/chat/completions",
+                             "sk-test-not-a-real-key");
+
+    eai_inference_input_t in = {0};
+    in.text = "hello";
+    in.text_len = 5;
+    eai_inference_output_t out;
+    memset(&out, 0, sizeof(out));
+
+    eai_status_t st = eai_min_router_infer_cloud(&router, &in, &out);
+    if (st != EAI_ERR_UNSUPPORTED) {
+        char msg[96];
+        snprintf(msg, sizeof(msg),
+                 "https endpoint must be refused (got status %d, want %d)",
+                 (int)st, (int)EAI_ERR_UNSUPPORTED);
+        FAIL(msg);
+        return;
+    }
+    if (out.text_len != 0) {
+        FAIL("refused request must not produce output");
+        return;
+    }
+#endif
+    PASS();
+}
+
 /* Issue #43: stub_load_model closed the model FILE twice on the short-read
  * path (fclose after fread, then fclose again in the else branch) -- undefined
  * behavior. The fix removes the second close. A short read is not
@@ -121,6 +158,7 @@ int main(void)
 
     test_memory_lite();
     test_router_mode();
+    test_cloud_https_not_downgraded();
     test_load_unparseable_model_falls_back();
     test_load_missing_model_falls_back();
     test_load_empty_model_falls_back();

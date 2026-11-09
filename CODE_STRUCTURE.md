@@ -438,6 +438,11 @@ Three routing modes:
 | `EAI_ROUTE_CLOUD` | Always cloud (falls back to local if unavailable)  |
 | `EAI_ROUTE_AUTO`  | Large inputs (>2KB) go to cloud when available     |
 
+The minimal build has no TLS. `eai_min_router_infer_cloud` returns
+`EAI_ERR_UNSUPPORTED` for an `https://` endpoint rather than sending the
+request, and its API key, over plain HTTP. Plain `http://` endpoints are still
+sent unencrypted, so use them only for a trusted local endpoint.
+
 ### memory_lite.h / memory_lite.c — Lightweight Memory
 
 A simple key-value store (128 entries max) that gives agents persistent context across tasks.
