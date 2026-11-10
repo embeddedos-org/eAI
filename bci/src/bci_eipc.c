@@ -6,6 +6,7 @@
 #include "eai/log.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #ifdef EAI_EIPC_ENABLED
 
@@ -22,6 +23,7 @@ typedef SOCKET sock_t;
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <fcntl.h>
 typedef int sock_t;
 #define SOCK_INVALID (-1)
 #define sock_close close

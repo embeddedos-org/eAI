@@ -207,7 +207,9 @@ eai_status_t eai_eipc_listener_send_chat_response(eai_eipc_listener_t *listener,
     strncpy(resp.response, response, sizeof(resp.response) - 1);
 
     char payload_json[EIPC_MAX_PAYLOAD];
-    eipc_status_t rc = eipc_chat_response_to_json(&resp, payload_json, sizeof(payload_json));
+    size_t payload_len = 0;
+    eipc_status_t rc = eipc_chat_response_to_json(&resp, payload_json, sizeof(payload_json),
+                                                  &payload_len);
     if (rc != EIPC_OK) return EAI_ERR_IO;
 
     eipc_message_t msg;
@@ -217,7 +219,7 @@ eai_status_t eai_eipc_listener_send_chat_response(eai_eipc_listener_t *listener,
     strncpy(msg.source, "eai-server", sizeof(msg.source) - 1);
     if (session_id)
         strncpy(msg.session_id, session_id, sizeof(msg.session_id) - 1);
-    msg.payload_len = (uint32_t)strlen(payload_json);
+    msg.payload_len = (uint32_t)payload_len;
     memcpy(msg.payload, payload_json, msg.payload_len);
 
     rc = eipc_server_send_message(&listener->active_conn, &msg);

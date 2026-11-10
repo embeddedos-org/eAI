@@ -32,6 +32,37 @@ jobs:
           # catches an empty test set, which ctest otherwise reports as success.
           cd build && ctest --output-on-failure --no-tests=error
 
+  # ── EIPC integration build ────────────────────────────────────────────────
+  # EAI_EIPC_ENABLED=ON adds common/src/eipc_listener.c and bci/src/bci_eipc.c,
+  # which no other job compiles. CMakeLists.txt takes the eIPC C SDK from a
+  # sibling checkout named eipc/, so check both repos out side by side.
+  build-eipc:
+    name: Build with EAI_EIPC_ENABLED=ON
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: eAI
+          submodules: recursive
+      # Pinned so an eIPC change cannot turn this job red on its own. Bump
+      # the SHA on purpose, in its own PR, when eAI should follow the SDK.
+      - uses: actions/checkout@v4
+        with:
+          repository: embeddedos-org/eIPC
+          ref: 70748b25ec05440cfa7a8ad886930478b02ad125
+          path: eipc
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build gcc-12 g++-12
+      - name: Build
+        run: |
+          cmake -S eAI -B build-eipc -G Ninja \
+            -DCMAKE_C_COMPILER=gcc-12 \
+            -DCMAKE_CXX_COMPILER=g++-12 \
+            -DEAI_EIPC_ENABLED=ON
+          cmake --build build-eipc --parallel $(nproc)
+
   # ── Python Tests ──────────────────────────────────────────────────────────
   test-python:
     name: Python Tests
