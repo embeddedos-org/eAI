@@ -240,7 +240,7 @@ int eai_feedback_get_recent(const eai_feedback_buffer_t *buf, eai_feedback_t *ou
 
 float eai_feedback_avg_score(const eai_feedback_buffer_t *buf, int recent_n)
 {
-    if (!buf || buf->count == 0) return 0.0f;
+    if (!buf || buf->count == 0 || recent_n <= 0) return 0.0f;
 
     int n = buf->count < recent_n ? buf->count : recent_n;
     float sum = 0.0f;
