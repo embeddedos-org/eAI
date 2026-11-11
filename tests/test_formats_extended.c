@@ -269,6 +269,46 @@ static void test_gguf_get_tensor_data_values(void)
     PASS();
 }
 
+static void test_gguf_reject_tensor_ndim_overflow(void)
+{
+    TEST(gguf_reject_tensor_ndim_overflow);
+    const char *path = "test_gguf_bad_ndim.gguf";
+    FILE *fp = fopen(path, "wb");
+    if (!fp) { FAIL("cannot create file"); return; }
+
+    uint32_t magic = 0x46554747;
+    uint32_t version = 3;
+    uint64_t n_tensors = 1;
+    uint64_t n_kv = 0;
+    fwrite(&magic, 4, 1, fp);
+    fwrite(&version, 4, 1, fp);
+    fwrite(&n_tensors, 8, 1, fp);
+    fwrite(&n_kv, 8, 1, fp);
+
+    write_gguf_string(fp, "bad.tensor");
+    uint32_t ndim = EAI_TENSOR_MAX_DIMS + 4; /* 12 > 8 */
+    fwrite(&ndim, 4, 1, fp);
+    for (uint32_t d = 0; d < ndim; d++) {
+        uint64_t dim = 2;
+        fwrite(&dim, 8, 1, fp);
+    }
+    uint32_t dtype = 0;
+    uint64_t offset = 0;
+    fwrite(&dtype, 4, 1, fp);
+    fwrite(&offset, 8, 1, fp);
+    fclose(fp);
+
+    gguf_context_t ctx;
+    eai_status_t st = eai_gguf_load(path, &ctx);
+    remove(path);
+    if (st != EAI_ERR_FORMAT) {
+        eai_gguf_free(&ctx);
+        FAIL("expected EAI_ERR_FORMAT for ndim > EAI_TENSOR_MAX_DIMS");
+        return;
+    }
+    PASS();
+}
+
 /* ========== GGUF: multiple KV types in single file ========== */
 
 static const char *create_gguf_multi_kv(void)
@@ -494,6 +534,7 @@ int main(void)
     test_gguf_load_with_tensor();
     test_gguf_get_tensor_by_name();
     test_gguf_get_tensor_data_values();
+    test_gguf_reject_tensor_ndim_overflow();
 
     printf("\n--- GGUF multi KV types ---\n");
     test_gguf_multi_kv_types();
