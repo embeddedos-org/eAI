@@ -200,13 +200,22 @@ static eai_status_t eaim_model_load(eaim_model_t *m, const uint8_t *buf, size_t 
         descs[i].bias_count = read_u32_le(p + 8);
         descs[i].activation = read_u32_le(p + 12);
 
+        uint32_t expected_cols = (i == 0) ? m->input_dim : descs[i - 1].rows;
         if (descs[i].rows == 0 || descs[i].rows > EAIM_MAX_DIM ||
-            descs[i].cols == 0 || descs[i].cols > EAIM_MAX_DIM) {
-            EAI_LOG_ERROR(LOG_MOD, "invalid layer %u dims: %u x %u", i, descs[i].rows, descs[i].cols);
+            descs[i].cols == 0 || descs[i].cols > EAIM_MAX_DIM ||
+            descs[i].bias_count != descs[i].rows ||
+            descs[i].cols != expected_cols) {
+            EAI_LOG_ERROR(LOG_MOD, "invalid layer %u dims: %u x %u (bias=%u, expected_cols=%u)",
+                          i, descs[i].rows, descs[i].cols, descs[i].bias_count, expected_cols);
             return EAI_ERR_INVALID;
         }
         if (descs[i].rows > max_dim) max_dim = descs[i].rows;
         if (descs[i].cols > max_dim) max_dim = descs[i].cols;
+    }
+    if (descs[m->num_layers - 1].rows != m->output_dim) {
+        EAI_LOG_ERROR(LOG_MOD, "final layer rows (%u) != output_dim (%u)",
+                      descs[m->num_layers - 1].rows, m->output_dim);
+        return EAI_ERR_INVALID;
     }
     offset += desc_size;
 
