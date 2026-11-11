@@ -225,6 +225,9 @@ TEST(test_feedback_avg_score)
 
     float avg = eai_feedback_avg_score(&buf, 3);
     assert(avg > 0.49f && avg < 0.51f);
+    assert(eai_feedback_avg_score(&buf, 0) == 0.0f);
+    assert(!isnan(eai_feedback_avg_score(&buf, 0)));
+    assert(eai_feedback_avg_score(&buf, -5) == 0.0f);
     return 0;
 }
 
