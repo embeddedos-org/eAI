@@ -120,10 +120,14 @@ eai_status_t eai_gguf_load(const char *path, gguf_context_t *ctx)
             ti->name = read_string(fp);
 
             uint32_t ndim;
-            fread(&ndim, 4, 1, fp);
+            if (fread(&ndim, 4, 1, fp) != 1 || ndim > EAI_TENSOR_MAX_DIMS) {
+                fclose(fp);
+                eai_gguf_free(ctx);
+                return EAI_ERR_FORMAT;
+            }
             ti->ndim = (int)ndim;
 
-            for (int d = 0; d < ti->ndim && d < EAI_TENSOR_MAX_DIMS; d++) {
+            for (int d = 0; d < ti->ndim; d++) {
                 fread(&ti->shape[d], 8, 1, fp);
             }
 
@@ -238,8 +242,10 @@ eai_status_t eai_gguf_get_tensor(const gguf_context_t *ctx, const char *name, ea
 
             memset(tensor, 0, sizeof(*tensor));
             tensor->dtype = EAI_DTYPE_F32; /* TODO: map GGML dtype */
-            tensor->ndim = ti->ndim;
-            for (int d = 0; d < ti->ndim; d++) {
+            tensor->ndim = ti->ndim > EAI_TENSOR_MAX_DIMS
+                         ? EAI_TENSOR_MAX_DIMS
+                         : (ti->ndim < 0 ? 0 : ti->ndim);
+            for (int d = 0; d < tensor->ndim; d++) {
                 tensor->shape[d] = (int64_t)ti->shape[d];
             }
 
