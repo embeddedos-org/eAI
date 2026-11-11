@@ -152,6 +152,25 @@ static void test_load_empty_model_falls_back(void)
     remove(path);
 }
 
+static void test_load_mismatched_bias_model_falls_back(void)
+{
+    const char *path = "test_min_bad_bias.eaim";
+    FILE *f = fopen(path, "wb");
+    if (!f) { FAIL("could not create bad bias model file"); return; }
+
+    uint32_t hdr[8] = {0x4D494145u, 1u, 1u, 2u, 4u, 0u, 0u, 0u};
+    /* bias_count = 1 != rows = 4 */
+    uint32_t desc[4] = {4u, 2u, 1u, 0u};
+    float weights[9] = {0};
+    fwrite(hdr, sizeof(uint32_t), 8, f);
+    fwrite(desc, sizeof(uint32_t), 4, f);
+    fwrite(weights, sizeof(float), 9, f);
+    fclose(f);
+
+    test_load_model_fallback("bad-bias", path);
+    remove(path);
+}
+
 int main(void)
 {
     printf("=== EAI Min Tests ===\n");
@@ -162,6 +181,7 @@ int main(void)
     test_load_unparseable_model_falls_back();
     test_load_missing_model_falls_back();
     test_load_empty_model_falls_back();
+    test_load_mismatched_bias_model_falls_back();
 
     printf("\nResults: %d/%d passed, %d failed\n", tests_passed, tests_run, tests_failed);
     return tests_failed > 0 ? 1 : 0;
