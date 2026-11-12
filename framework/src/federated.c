@@ -140,7 +140,9 @@ eai_status_t eai_fw_fed_aggregate(eai_fw_federated_t *fed) {
     int submitted = 0;
 
     for (int i = 0; i < fed->participant_count; i++) {
-        if (fed->participants[i].submitted) {
+        /* A removed participant keeps its last submission; it is not part
+         * of this round, so its update must not be averaged in. */
+        if (fed->participants[i].active && fed->participants[i].submitted) {
             total_loss += fed->participants[i].local_loss * fed->participants[i].samples_trained;
             total_samples += fed->participants[i].samples_trained;
             submitted++;
