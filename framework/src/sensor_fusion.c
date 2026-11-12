@@ -102,6 +102,13 @@ eai_status_t eai_fw_fusion_update_source(eai_fw_sensor_fusion_t *sf, const char 
     return EAI_OK;
 }
 
+/* A source takes part in fusion only once it has reported a value. Before
+ * its first eai_fw_fusion_update_source() its last_value is the 0.0f that
+ * eai_fw_fusion_add_source() left there, not a reading. */
+static bool source_usable(const eai_fusion_source_t *s) {
+    return s->active && s->status == EAI_FUSION_SRC_OK && s->last_update_ts > 0;
+}
+
 static void check_stale_sources(eai_fusion_group_t *g) {
     uint64_t now = fusion_now_ms();
     for (int i = 0; i < g->source_count; i++) {
@@ -117,7 +124,7 @@ static void check_stale_sources(eai_fusion_group_t *g) {
 static float fuse_weighted_avg(eai_fusion_group_t *g) {
     float sum = 0.0f, weight_sum = 0.0f;
     for (int i = 0; i < g->source_count; i++) {
-        if (g->sources[i].active && g->sources[i].status == EAI_FUSION_SRC_OK) {
+        if (source_usable(&g->sources[i])) {
             sum += g->sources[i].last_value * g->sources[i].weight;
             weight_sum += g->sources[i].weight;
         }
@@ -129,7 +136,7 @@ static float fuse_kalman(eai_fusion_group_t *g) {
     eai_kalman_state_t *k = &g->kalman;
 
     for (int i = 0; i < g->source_count; i++) {
-        if (g->sources[i].active && g->sources[i].status == EAI_FUSION_SRC_OK) {
+        if (source_usable(&g->sources[i])) {
             float predicted_cov = k->error_covariance + k->process_noise;
             k->kalman_gain = predicted_cov / (predicted_cov + k->measurement_noise);
             k->estimate = k->estimate + k->kalman_gain * (g->sources[i].last_value - k->estimate);
@@ -144,7 +151,7 @@ static float fuse_vote(eai_fusion_group_t *g, bool require_unanimous) {
     int count = 0;
 
     for (int i = 0; i < g->source_count; i++) {
-        if (g->sources[i].active && g->sources[i].status == EAI_FUSION_SRC_OK) {
+        if (source_usable(&g->sources[i])) {
             values[count++] = g->sources[i].last_value;
         }
     }
@@ -202,7 +209,7 @@ eai_status_t eai_fw_fusion_fuse(eai_fw_sensor_fusion_t *sf, const char *group) {
         case EAI_FUSION_MAX_VALUE: {
             float max = -1e30f;
             for (int i = 0; i < g->source_count; i++) {
-                if (g->sources[i].active && g->sources[i].status == EAI_FUSION_SRC_OK) {
+                if (source_usable(&g->sources[i])) {
                     if (g->sources[i].last_value > max) max = g->sources[i].last_value;
                 }
             }
@@ -212,7 +219,7 @@ eai_status_t eai_fw_fusion_fuse(eai_fw_sensor_fusion_t *sf, const char *group) {
         case EAI_FUSION_MIN_VALUE: {
             float min = 1e30f;
             for (int i = 0; i < g->source_count; i++) {
-                if (g->sources[i].active && g->sources[i].status == EAI_FUSION_SRC_OK) {
+                if (source_usable(&g->sources[i])) {
                     if (g->sources[i].last_value < min) min = g->sources[i].last_value;
                 }
             }
@@ -260,7 +267,7 @@ int eai_fw_fusion_active_sources(const eai_fw_sensor_fusion_t *sf, const char *g
 
     int count = 0;
     for (int i = 0; i < g->source_count; i++) {
-        if (g->sources[i].active && g->sources[i].status == EAI_FUSION_SRC_OK) count++;
+        if (source_usable(&g->sources[i])) count++;
     }
     return count;
 }
