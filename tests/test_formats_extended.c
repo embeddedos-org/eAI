@@ -139,6 +139,81 @@ static void test_gguf_get_int_wrong_type(void)
     PASS();
 }
 
+static void test_gguf_get_int_u16_i16(void)
+{
+    TEST(gguf_get_int_u16_i16);
+    static const char *path = "test_gguf_16bit_kv.gguf";
+    FILE *fp = fopen(path, "wb");
+    if (!fp) { FAIL("create failed"); return; }
+
+    uint32_t magic = 0x46554747;
+    uint32_t version = 3;
+    uint64_t n_tensors = 0, n_kv = 4;
+    fwrite(&magic, 4, 1, fp);
+    fwrite(&version, 4, 1, fp);
+    fwrite(&n_tensors, 8, 1, fp);
+    fwrite(&n_kv, 8, 1, fp);
+
+    /* KV 1: UINT16 key */
+    write_gguf_string(fp, "model.u16_param");
+    uint32_t type_u16 = GGUF_TYPE_UINT16;
+    fwrite(&type_u16, 4, 1, fp);
+    uint16_t u16_val = 4096;
+    fwrite(&u16_val, 2, 1, fp);
+
+    /* KV 2: INT16 key */
+    write_gguf_string(fp, "model.i16_param");
+    uint32_t type_i16 = GGUF_TYPE_INT16;
+    fwrite(&type_i16, 4, 1, fp);
+    int16_t i16_val = -512;
+    fwrite(&i16_val, 2, 1, fp);
+
+    /* KV 3: ARRAY of UINT16 (verifies stream offset stays aligned) */
+    write_gguf_string(fp, "model.u16_arr");
+    uint32_t type_arr = GGUF_TYPE_ARRAY;
+    uint64_t arr_count = 2;
+    fwrite(&type_arr, 4, 1, fp);
+    fwrite(&type_u16, 4, 1, fp);
+    fwrite(&arr_count, 8, 1, fp);
+    uint16_t arr_vals[2] = { 10, 20 };
+    fwrite(arr_vals, 2, 2, fp);
+
+    /* KV 4: trailing STRING key (fails if earlier 16-bit KVs misaligned fp) */
+    write_gguf_string(fp, "model.trailing");
+    uint32_t type_str = GGUF_TYPE_STRING;
+    fwrite(&type_str, 4, 1, fp);
+    write_gguf_string(fp, "aligned");
+    fclose(fp);
+
+    gguf_context_t ctx;
+    eai_status_t st = eai_gguf_load(path, &ctx);
+    if (st != EAI_OK) { FAIL("load failed"); remove(path); return; }
+
+    if (eai_gguf_get_int(&ctx, "model.u16_param", -1) != 4096) {
+        FAIL("expected 4096 for UINT16 key");
+        eai_gguf_free(&ctx);
+        remove(path);
+        return;
+    }
+    if (eai_gguf_get_int(&ctx, "model.i16_param", 0) != -512) {
+        FAIL("expected -512 for INT16 key");
+        eai_gguf_free(&ctx);
+        remove(path);
+        return;
+    }
+    const char *trailing = eai_gguf_get_str(&ctx, "model.trailing");
+    if (!trailing || strcmp(trailing, "aligned") != 0) {
+        FAIL("stream misaligned after 16-bit KVs");
+        eai_gguf_free(&ctx);
+        remove(path);
+        return;
+    }
+
+    eai_gguf_free(&ctx);
+    remove(path);
+    PASS();
+}
+
 /* ========== GGUF: tensor info + data ========== */
 
 static const char *create_gguf_with_tensor(void)
@@ -476,6 +551,7 @@ static void cleanup(void)
     remove("test_gguf_tensor.gguf");
     remove("test_gguf_multi_kv.gguf");
     remove("test_gguf_str_tmp.gguf");
+    remove("test_gguf_16bit_kv.gguf");
     remove("test_onnx_multi.onnx");
     remove("test_onnx_empty.onnx");
     remove("test_unknown_fmt.bin");
@@ -489,6 +565,7 @@ int main(void)
     test_gguf_get_int_i32();
     test_gguf_get_int_u32();
     test_gguf_get_int_wrong_type();
+    test_gguf_get_int_u16_i16();
 
     printf("\n--- GGUF tensors ---\n");
     test_gguf_load_with_tensor();

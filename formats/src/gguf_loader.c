@@ -34,6 +34,8 @@ static eai_status_t read_kv(FILE *fp, gguf_kv_t *kv)
     switch (type) {
         case GGUF_TYPE_UINT8:   fread(&kv->value.u8,  1, 1, fp); break;
         case GGUF_TYPE_INT8:    fread(&kv->value.i8,  1, 1, fp); break;
+        case GGUF_TYPE_UINT16:  fread(&kv->value.u16, 2, 1, fp); break;
+        case GGUF_TYPE_INT16:   fread(&kv->value.i16, 2, 1, fp); break;
         case GGUF_TYPE_UINT32:  fread(&kv->value.u32, 4, 1, fp); break;
         case GGUF_TYPE_INT32:   fread(&kv->value.i32, 4, 1, fp); break;
         case GGUF_TYPE_UINT64:  fread(&kv->value.u64, 8, 1, fp); break;
@@ -54,6 +56,8 @@ static eai_status_t read_kv(FILE *fp, gguf_kv_t *kv)
                     case GGUF_TYPE_UINT8:
                     case GGUF_TYPE_INT8:
                     case GGUF_TYPE_BOOL:    fseek(fp, 1, SEEK_CUR); break;
+                    case GGUF_TYPE_UINT16:
+                    case GGUF_TYPE_INT16:   fseek(fp, 2, SEEK_CUR); break;
                     case GGUF_TYPE_UINT32:
                     case GGUF_TYPE_INT32:
                     case GGUF_TYPE_FLOAT32: fseek(fp, 4, SEEK_CUR); break;
@@ -219,6 +223,8 @@ int eai_gguf_get_int(const gguf_context_t *ctx, const char *key, int default_val
     for (uint64_t i = 0; i < ctx->n_kv; i++) {
         if (ctx->kv[i].key && strcmp(ctx->kv[i].key, key) == 0) {
             switch (ctx->kv[i].type) {
+                case GGUF_TYPE_INT16:  return (int)ctx->kv[i].value.i16;
+                case GGUF_TYPE_UINT16: return (int)ctx->kv[i].value.u16;
                 case GGUF_TYPE_INT32:  return ctx->kv[i].value.i32;
                 case GGUF_TYPE_UINT32: return (int)ctx->kv[i].value.u32;
                 default: return default_val;
