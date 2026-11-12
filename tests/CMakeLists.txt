@@ -97,6 +97,13 @@ if(EAI_BUILD_FRAMEWORK)
     add_executable(eai_test_ekf test_ekf.c)
     target_link_libraries(eai_test_ekf PRIVATE eai_common eai_framework)
     add_test(NAME eai_ekf_tests COMMAND eai_test_ekf)
+
+    add_executable(eai_test_sensor_fusion test_sensor_fusion.c)
+    target_link_libraries(eai_test_sensor_fusion PRIVATE eai_common eai_framework)
+    if(UNIX)
+        target_link_libraries(eai_test_sensor_fusion PRIVATE m)
+    endif()
+    add_test(NAME eai_sensor_fusion_tests COMMAND eai_test_sensor_fusion)
 endif()
 
 # --- test_tool: Tool registry ---
