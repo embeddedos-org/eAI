@@ -124,6 +124,38 @@ TEST(test_pref_save_load)
     return 0;
 }
 
+TEST(test_pref_save_load_any_value)
+{
+    /* Every value eai_pref_set() accepts must come back from a save + load:
+     * an empty value and a value containing '|' included. */
+    static const char *keys[]   = { "signature", "filter", "theme" };
+    static const char *values[] = { "", "error|warn", "dark" };
+    const char *path = "test_prefs_any_value.dat";
+    int bad = 0;
+
+    eai_preference_store_t store1;
+    eai_pref_init(&store1, path);
+    for (int i = 0; i < 3; i++)
+        eai_pref_set(&store1, keys[i], values[i], EAI_PREF_STRING, 0.5f);
+    if (eai_pref_save(&store1) != EAI_OK) { remove(path); return 1; }
+
+    eai_preference_store_t store2;
+    eai_pref_init(&store2, path);
+    if (eai_pref_load(&store2) != EAI_OK) { remove(path); return 1; }
+    remove(path);
+
+    printf("\n    loaded %d of 3 entries\n", store2.count);
+    for (int i = 0; i < 3; i++) {
+        const char *got = eai_pref_get(&store2, keys[i]);
+        printf("    %-10s saved \"%s\", loaded %s%s%s\n", keys[i], values[i],
+               got ? "\"" : "", got ? got : "(missing)", got ? "\"" : "");
+        if (!got || strcmp(got, values[i]) != 0) bad++;
+        else if (fabsf(eai_pref_get_weight(&store2, keys[i]) - 0.5f) > 1e-6f) bad++;
+    }
+    printf("  %-50s", "");
+    return (bad == 0 && store2.count == 3) ? 0 : 1;
+}
+
 TEST(test_pref_clear)
 {
     eai_preference_store_t store;
@@ -330,6 +362,7 @@ int main(void)
     RUN(test_pref_not_found);
     RUN(test_pref_decay);
     RUN(test_pref_save_load);
+    RUN(test_pref_save_load_any_value);
     RUN(test_pref_clear);
     RUN(test_pref_eviction);
 

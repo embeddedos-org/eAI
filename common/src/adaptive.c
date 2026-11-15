@@ -158,16 +158,33 @@ eai_status_t eai_pref_load(eai_preference_store_t *store)
         if (len > 0 && line[len - 1] == '\n') line[len - 1] = '\0';
 
         eai_preference_t *p = &store->entries[store->count];
-        char key[EAI_PREF_KEY_MAX], value[EAI_PREF_VALUE_MAX];
         int type_int;
         float weight, decay;
 
-        if (sscanf(line, "%63[^|]|%511[^|]|%d|%f|%f",
-                   key, value, &type_int, &weight, &decay) == 5) {
-            strncpy(p->key, key, EAI_PREF_KEY_MAX - 1);
-            p->key[EAI_PREF_KEY_MAX - 1] = '\0';
-            strncpy(p->value, value, EAI_PREF_VALUE_MAX - 1);
-            p->value[EAI_PREF_VALUE_MAX - 1] = '\0';
+        /* "key|value|type|weight|decay": the key ends at the first '|' and
+         * the last three fields are numbers, so the value is everything in
+         * between. It may be empty or contain '|', as eai_pref_set() allows. */
+        char *key_end = strchr(line, '|');
+        char *num = NULL;
+        if (key_end) {
+            char *q = line + strlen(line);
+            int bars = 0;
+            while (q > key_end && bars < 3) {
+                q--;
+                if (*q == '|') bars++;
+            }
+            if (bars == 3 && q > key_end) num = q;
+        }
+
+        if (num && sscanf(num + 1, "%d|%f|%f", &type_int, &weight, &decay) == 3) {
+            size_t key_len = (size_t)(key_end - line);
+            size_t val_len = (size_t)(num - (key_end + 1));
+            if (key_len > EAI_PREF_KEY_MAX - 1) key_len = EAI_PREF_KEY_MAX - 1;
+            if (val_len > EAI_PREF_VALUE_MAX - 1) val_len = EAI_PREF_VALUE_MAX - 1;
+            memcpy(p->key, line, key_len);
+            p->key[key_len] = '\0';
+            memcpy(p->value, key_end + 1, val_len);
+            p->value[val_len] = '\0';
             p->type = (eai_preference_type_t)type_int;
             p->weight = weight;
             p->decay_rate = decay;
