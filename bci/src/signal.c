@@ -68,22 +68,27 @@ int eai_bci_signal_count(const eai_bci_signal_t *sig)
 
 /* ========== IIR Filter Design ========== */
 
+/*
+ * Second-order band-pass with its -3 dB points at low_hz and high_hz and
+ * unity gain at sqrt(low_hz * high_hz): the analog prototype
+ * H(s) = B s / (s^2 + B s + W0^2) with prewarped edges
+ * Wl = tan(pi * low_hz / fs), Wh = tan(pi * high_hz / fs),
+ * B = Wh - Wl, W0^2 = Wl * Wh, mapped with the bilinear transform.
+ */
 static void design_bandpass_iir(eai_bci_iir_filter_t *f, float sample_rate,
                                  float low_hz, float high_hz)
 {
-    float w_low  = 2.0f * (float)M_PI * low_hz  / sample_rate;
-    float w_high = 2.0f * (float)M_PI * high_hz / sample_rate;
-    float bw = w_high - w_low;
-    float w0 = (w_low + w_high) / 2.0f;
+    float w_low  = tanf((float)M_PI * low_hz  / sample_rate);
+    float w_high = tanf((float)M_PI * high_hz / sample_rate);
+    float bw  = w_high - w_low;
+    float w02 = w_low * w_high;
 
-    float alpha = sinf(w0) * sinhf(logf(2.0f) / 2.0f * bw * w0 / sinf(w0));
-
-    float b0 =  alpha;
+    float b0 =  bw;
     float b1 =  0.0f;
-    float b2 = -alpha;
-    float a0 =  1.0f + alpha;
-    float a1 = -2.0f * cosf(w0);
-    float a2 =  1.0f - alpha;
+    float b2 = -bw;
+    float a0 =  1.0f + bw + w02;
+    float a1 =  2.0f * (w02 - 1.0f);
+    float a2 =  1.0f - bw + w02;
 
     f->b[0] = b0 / a0;
     f->b[1] = b1 / a0;

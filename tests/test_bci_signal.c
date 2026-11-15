@@ -119,6 +119,50 @@ static void test_preprocess_init(void)
     PASS();
 }
 
+/* |H(e^jw)| of a biquad at freq_hz, from its stored coefficients. */
+static double biquad_gain(const eai_bci_iir_filter_t *f, double freq_hz, double fs_hz)
+{
+    double w  = 2.0 * 3.14159265358979323846 * freq_hz / fs_hz;
+    double c1 = cos(w), s1 = sin(w), c2 = cos(2.0 * w), s2 = sin(2.0 * w);
+    double nr = f->b[0] + f->b[1] * c1 + f->b[2] * c2;
+    double ni = -(f->b[1] * s1 + f->b[2] * s2);
+    double dr = f->a[0] + f->a[1] * c1 + f->a[2] * c2;
+    double di = -(f->a[1] * s1 + f->a[2] * s2);
+    return sqrt((nr * nr + ni * ni) / (dr * dr + di * di));
+}
+
+static void test_bandpass_edges(void)
+{
+    /* The band-pass must be about -3 dB (gain 0.707) at low_hz and high_hz
+     * and unity at the centre sqrt(low_hz * high_hz). */
+    static const float bands[][3] = {
+        /* sample rate, low, high */
+        { 250.0f,  1.0f, 50.0f },   /* the eai_bci_config defaults */
+        { 250.0f,  8.0f, 30.0f },   /* mu + beta */
+        { 1000.0f, 8.0f, 30.0f },
+    };
+    int bad = 0;
+    TEST(bandpass_edges);
+    for (size_t i = 0; i < sizeof(bands) / sizeof(bands[0]); i++) {
+        float fs = bands[i][0], lo = bands[i][1], hi = bands[i][2];
+        eai_bci_preprocessor_t pp;
+        if (eai_bci_preprocess_init(&pp, 1, fs, lo, hi, 50.0f) != EAI_OK) {
+            FAIL("init failed");
+            return;
+        }
+        double g_lo = biquad_gain(&pp.bandpass, lo, fs);
+        double g_hi = biquad_gain(&pp.bandpass, hi, fs);
+        double g_c  = biquad_gain(&pp.bandpass, sqrt((double)lo * hi), fs);
+        int ok = fabs(g_lo - 0.7071) <= 0.02 && fabs(g_hi - 0.7071) <= 0.02 && fabs(g_c - 1.0) <= 0.01;
+        printf("\n    fs=%g band %g-%g Hz: gain %.3f at %g Hz, %.3f at %g Hz, %.3f at centre%s",
+               fs, lo, hi, g_lo, lo, g_hi, hi, g_c, ok ? "" : "  <- want 0.707, 0.707, 1.000");
+        if (!ok) bad++;
+    }
+    printf("\n  %-46s", "");
+    if (bad) { FAIL("band-pass edges are not at low_hz and high_hz"); return; }
+    PASS();
+}
+
 static void test_preprocess_sample(void)
 {
     TEST(preprocess_sample);
@@ -163,6 +207,7 @@ int main(void)
     test_signal_get_window();
     test_band_power();
     test_preprocess_init();
+    test_bandpass_edges();
     test_preprocess_sample();
     test_signal_clear();
 
