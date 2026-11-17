@@ -33,12 +33,42 @@ eai_status_t eai_config_load_file(eai_config_t *cfg, const char *path)
         return EAI_ERR_IO;
     }
 
+    /* Which list the "- item" lines that follow belong to. The profiles in
+     * profiles/ have three lists: runtime.providers (or runtimes), tools and
+     * connectors. Any other "key:" line ends the current list. */
+    enum { LIST_NONE, LIST_TOOLS, LIST_CONNECTORS, LIST_PROVIDERS } list = LIST_NONE;
+
     char line[512];
     while (fgets(line, sizeof(line), fp)) {
         char val[256];
         char *p = line;
         while (*p == ' ' || *p == '\t') p++;
-        if (*p == '#' || *p == '\n' || *p == '\0') continue;
+        if (*p == '#' || *p == '\n' || *p == '\r' || *p == '\0') continue;
+
+        if (sscanf(p, "- %255s", val) == 1) {
+            if (list == LIST_TOOLS && cfg->tool_count < EAI_CONFIG_MAX_TOOLS) {
+                cfg->tools[cfg->tool_count++] = strdup(val);
+            } else if (list == LIST_CONNECTORS &&
+                       cfg->connector_count < EAI_CONFIG_MAX_CONNECTORS) {
+                cfg->connectors[cfg->connector_count++] = strdup(val);
+            } else if (list == LIST_PROVIDERS &&
+                       cfg->runtime_multi.provider_count < EAI_CONFIG_MAX_PROVIDERS) {
+                cfg->runtime_multi.providers[cfg->runtime_multi.provider_count++] = strdup(val);
+            }
+            continue;
+        }
+
+        list = LIST_NONE;
+        if (sscanf(p, "%255[^: \t]", val) == 1 && p[strlen(val)] == ':') {
+            const char *rest = p + strlen(val) + 1;
+            while (*rest == ' ' || *rest == '\t') rest++;
+            if (*rest == '\n' || *rest == '\r' || *rest == '\0' || *rest == '#') {
+                if (strcmp(val, "tools") == 0)           list = LIST_TOOLS;
+                else if (strcmp(val, "connectors") == 0) list = LIST_CONNECTORS;
+                else if (strcmp(val, "providers") == 0 ||
+                         strcmp(val, "runtimes") == 0)   list = LIST_PROVIDERS;
+            }
+        }
 
         if (sscanf(p, "variant: %255s", val) == 1) {
             if (strcmp(val, "min") == 0)       cfg->variant = EAI_VARIANT_MIN;
@@ -78,11 +108,6 @@ eai_status_t eai_config_load_file(eai_config_t *cfg, const char *path)
         else if (sscanf(p, "adaptive.train_during_idle: %255s", val) == 1) {
             cfg->adaptive.train_during_idle = (strcmp(val, "true") == 0);
         }
-        else if (sscanf(p, "- %255s", val) == 1) {
-            if (cfg->tool_count < EAI_CONFIG_MAX_TOOLS) {
-                cfg->tools[cfg->tool_count++] = strdup(val);
-            }
-        }
     }
 
     fclose(fp);
@@ -97,7 +122,7 @@ eai_status_t eai_config_load_profile(eai_config_t *cfg, const char *profile_name
     if (strcmp(profile_name, "smart-camera") == 0) {
         cfg->variant = EAI_VARIANT_FRAMEWORK;
         cfg->mode    = EAI_MODE_LOCAL;
-        cfg->runtime_multi.providers[0] = "onnxruntime";
+        cfg->runtime_multi.providers[0] = strdup("onnxruntime");
         cfg->runtime_multi.provider_count = 1;
         cfg->tools[0] = strdup("device.read_sensor");
         cfg->tools[1] = strdup("http.get");
@@ -107,12 +132,12 @@ eai_status_t eai_config_load_profile(eai_config_t *cfg, const char *profile_name
     else if (strcmp(profile_name, "industrial-gateway") == 0) {
         cfg->variant = EAI_VARIANT_FRAMEWORK;
         cfg->mode    = EAI_MODE_LOCAL;
-        cfg->runtime_multi.providers[0] = "onnxruntime";
-        cfg->runtime_multi.providers[1] = "llama.cpp";
+        cfg->runtime_multi.providers[0] = strdup("onnxruntime");
+        cfg->runtime_multi.providers[1] = strdup("llama.cpp");
         cfg->runtime_multi.provider_count = 2;
-        cfg->connectors[0] = "mqtt";
-        cfg->connectors[1] = "opcua";
-        cfg->connectors[2] = "modbus";
+        cfg->connectors[0] = strdup("mqtt");
+        cfg->connectors[1] = strdup("opcua");
+        cfg->connectors[2] = strdup("modbus");
         cfg->connector_count = 3;
         cfg->tools[0] = strdup("mqtt.publish");
         cfg->tools[1] = strdup("device.read_sensor");
@@ -123,11 +148,11 @@ eai_status_t eai_config_load_profile(eai_config_t *cfg, const char *profile_name
     else if (strcmp(profile_name, "robot-controller") == 0) {
         cfg->variant = EAI_VARIANT_FRAMEWORK;
         cfg->mode    = EAI_MODE_LOCAL;
-        cfg->runtime_multi.providers[0] = "onnxruntime";
-        cfg->runtime_multi.providers[1] = "tflite";
+        cfg->runtime_multi.providers[0] = strdup("onnxruntime");
+        cfg->runtime_multi.providers[1] = strdup("tflite");
         cfg->runtime_multi.provider_count = 2;
-        cfg->connectors[0] = "can";
-        cfg->connectors[1] = "mqtt";
+        cfg->connectors[0] = strdup("can");
+        cfg->connectors[1] = strdup("mqtt");
         cfg->connector_count = 2;
         cfg->tools[0] = strdup("device.read_sensor");
         cfg->tools[1] = strdup("mqtt.publish");
@@ -146,9 +171,9 @@ eai_status_t eai_config_load_profile(eai_config_t *cfg, const char *profile_name
     else if (strcmp(profile_name, "adaptive-edge") == 0) {
         cfg->variant = EAI_VARIANT_FRAMEWORK;
         cfg->mode    = EAI_MODE_HYBRID;
-        cfg->runtime_multi.providers[0] = "llama.cpp";
+        cfg->runtime_multi.providers[0] = strdup("llama.cpp");
         cfg->runtime_multi.provider_count = 1;
-        cfg->connectors[0] = "mqtt";
+        cfg->connectors[0] = strdup("mqtt");
         cfg->connector_count = 1;
         cfg->tools[0] = strdup("device.read_sensor");
         cfg->tools[1] = strdup("http.get");
@@ -225,5 +250,14 @@ void eai_config_free(eai_config_t *cfg)
         }
     }
     cfg->tool_count = 0;
+    for (int i = 0; i < cfg->connector_count; i++) {
+        free((void *)cfg->connectors[i]);
+        cfg->connectors[i] = NULL;
+    }
     cfg->connector_count = 0;
+    for (int i = 0; i < cfg->runtime_multi.provider_count; i++) {
+        free((void *)cfg->runtime_multi.providers[i]);
+        cfg->runtime_multi.providers[i] = NULL;
+    }
+    cfg->runtime_multi.provider_count = 0;
 }

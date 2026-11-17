@@ -137,12 +137,91 @@ static void test_new_error_codes(void)
     PASS();
 }
 
+/* A config file in the layout of profiles/<name>/profile.yaml: the list items
+ * under runtime.providers and connectors are not tools. */
+static void test_config_file_list_sections(void)
+{
+    TEST(config_file_list_sections);
+    const char *path = "test_config_lists.yaml";
+    FILE *fp = fopen(path, "w");
+    if (!fp) { FAIL("cannot write config file"); return; }
+    fputs("ai:\n"
+          "  variant: framework\n"
+          "  mode: local-first\n"
+          "\n"
+          "  runtime:\n"
+          "    providers:\n"
+          "      - onnxruntime\n"
+          "      - llama.cpp\n"
+          "\n"
+          "  tools:\n"
+          "    - mqtt.publish\n"
+          "    - http.get\n"
+          "\n"
+          "  connectors:\n"
+          "    - mqtt\n"
+          "    - modbus\n"
+          "\n"
+          "  hardware:\n"
+          "    accelerator: cpu\n", fp);
+    fclose(fp);
+
+    eai_config_t cfg;
+    eai_config_init(&cfg);
+    eai_status_t st = eai_config_load_file(&cfg, path);
+    remove(path);
+    if (st != EAI_OK) { eai_config_free(&cfg); FAIL("load failed"); return; }
+
+    int ok = cfg.tool_count == 2 &&
+             strcmp(cfg.tools[0], "mqtt.publish") == 0 &&
+             strcmp(cfg.tools[1], "http.get") == 0 &&
+             cfg.connector_count == 2 &&
+             strcmp(cfg.connectors[0], "mqtt") == 0 &&
+             strcmp(cfg.connectors[1], "modbus") == 0 &&
+             cfg.runtime_multi.provider_count == 2 &&
+             strcmp(cfg.runtime_multi.providers[0], "onnxruntime") == 0 &&
+             strcmp(cfg.runtime_multi.providers[1], "llama.cpp") == 0;
+    if (!ok) {
+        printf("(tools=%d connectors=%d providers=%d) ",
+               cfg.tool_count, cfg.connector_count, cfg.runtime_multi.provider_count);
+        eai_config_free(&cfg);
+        FAIL("list items filed under the wrong section");
+        return;
+    }
+    eai_config_free(&cfg);
+    if (cfg.connector_count != 0 || cfg.runtime_multi.provider_count != 0) {
+        FAIL("free left connectors or providers behind");
+        return;
+    }
+    PASS();
+}
+
+/* A built-in profile followed by eai_config_free() (as `eai run --profile` does). */
+static void test_profile_with_connectors_free(void)
+{
+    TEST(profile_with_connectors_free);
+    eai_config_t cfg;
+    eai_config_init(&cfg);
+    if (eai_config_load_profile(&cfg, "industrial-gateway") != EAI_OK) {
+        eai_config_free(&cfg); FAIL("load industrial-gateway failed"); return;
+    }
+    if (cfg.connector_count != 3 || strcmp(cfg.connectors[1], "opcua") != 0 ||
+        cfg.runtime_multi.provider_count != 2 ||
+        strcmp(cfg.runtime_multi.providers[1], "llama.cpp") != 0) {
+        eai_config_free(&cfg); FAIL("wrong connectors or providers"); return;
+    }
+    eai_config_free(&cfg);
+    PASS();
+}
+
 int main(void)
 {
     printf("=== EAI Common Tests ===\n\n");
 
     test_config_init();
     test_bci_assistive_profile();
+    test_config_file_list_sections();
+    test_profile_with_connectors_free();
     test_tool_registry();
     test_tool_exec();
     test_security_ctx();
