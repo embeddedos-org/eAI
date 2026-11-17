@@ -91,6 +91,57 @@ static void test_fed_aggregate_skips_removed_participant(void)
     PASS();
 }
 
+/* eai_fw_memory_t holds 1024 entries (~2.2 MB): keep it off the stack. */
+static eai_fw_memory_t g_mem;
+static eai_fw_memory_t g_mem_reloaded;
+
+/* Save g_mem to dir and load it into g_mem_reloaded. */
+static int mem_roundtrip(const char *dir)
+{
+    if (eai_fw_mem_save(&g_mem) != EAI_OK) return -1;
+    eai_fw_mem_init(&g_mem_reloaded, dir);
+    if (eai_fw_mem_load(&g_mem_reloaded) != EAI_OK) return -1;
+    return 0;
+}
+
+static void test_fw_mem_update_to_no_ttl_is_saved(void)
+{
+    TEST(fw_mem_update_to_no_ttl_is_saved);
+    const char *dir = ".";
+    eai_fw_mem_init(&g_mem, dir);
+    /* Stored first with a TTL (not persistent), then updated to never expire. */
+    eai_fw_mem_set(&g_mem, "agent", "goal", "draft", 60);
+    eai_fw_mem_set(&g_mem, "agent", "goal", "final", 0);
+
+    if (mem_roundtrip(dir) != 0) { FAIL("save/load failed"); return; }
+    const char *v = eai_fw_mem_get(&g_mem_reloaded, "agent", "goal");
+    remove("./memory.dat");
+    if (!v || strcmp(v, "final") != 0) {
+        FAIL("entry updated to ttl 0 was not saved");
+        return;
+    }
+    PASS();
+}
+
+static void test_fw_mem_update_to_ttl_is_not_saved(void)
+{
+    TEST(fw_mem_update_to_ttl_is_not_saved);
+    const char *dir = ".";
+    eai_fw_mem_init(&g_mem, dir);
+    /* Stored first with no expiry (persistent), then given a TTL. */
+    eai_fw_mem_set(&g_mem, "agent", "session", "abc", 0);
+    eai_fw_mem_set(&g_mem, "agent", "session", "abc", 60);
+
+    if (mem_roundtrip(dir) != 0) { FAIL("save/load failed"); return; }
+    const char *v = eai_fw_mem_get(&g_mem_reloaded, "agent", "session");
+    remove("./memory.dat");
+    if (v) {
+        FAIL("entry updated to a ttl was saved and reloaded with no expiry");
+        return;
+    }
+    PASS();
+}
+
 int main(void)
 {
     printf("=== EAI Framework Tests ===\n\n");
@@ -99,6 +150,8 @@ int main(void)
     test_policy_check();
     test_observability_counters();
     test_fed_aggregate_skips_removed_participant();
+    test_fw_mem_update_to_no_ttl_is_saved();
+    test_fw_mem_update_to_ttl_is_not_saved();
 
     printf("\n=== Results: %d/%d passed, %d failed ===\n",
            tests_passed, tests_run, tests_failed);

@@ -30,6 +30,7 @@ eai_status_t eai_fw_mem_set(eai_fw_memory_t *mem, const char *ns, const char *ke
             strncpy(mem->entries[i].value, value, EAI_FW_MEM_VALUE_MAX - 1);
             mem->entries[i].timestamp = (uint64_t)time(NULL);
             mem->entries[i].ttl_sec = ttl_sec;
+            mem->entries[i].persistent = (ttl_sec == 0);
             return EAI_OK;
         }
     }
