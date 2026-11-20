@@ -25,11 +25,17 @@ eai_status_t eai_min_obs_init(eai_min_obs_lite_t *obs) {
     return EAI_OK;
 }
 
+/* Counter names are stored cut to 63 characters, so compare only that many:
+ * a longer name must find the counter it created, not miss it with strcmp(). */
+static bool counter_name_matches(const char *stored, const char *name) {
+    return strncmp(stored, name, sizeof(((eai_lite_counter_t *)0)->name) - 1) == 0;
+}
+
 eai_status_t eai_min_obs_counter_inc(eai_min_obs_lite_t *obs, const char *name, uint64_t val) {
     if (!obs || !name) return EAI_ERR_INVALID;
 
     for (int i = 0; i < obs->counter_count; i++) {
-        if (strcmp(obs->counters[i].name, name) == 0) {
+        if (counter_name_matches(obs->counters[i].name, name)) {
             obs->counters[i].value += val;
             return EAI_OK;
         }
@@ -48,7 +54,7 @@ uint64_t eai_min_obs_counter_get(const eai_min_obs_lite_t *obs, const char *name
     if (!obs || !name) return 0;
 
     for (int i = 0; i < obs->counter_count; i++) {
-        if (strcmp(obs->counters[i].name, name) == 0) {
+        if (counter_name_matches(obs->counters[i].name, name)) {
             return obs->counters[i].value;
         }
     }
