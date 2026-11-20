@@ -36,6 +36,35 @@ static void test_memory_lite(void)
     PASS();
 }
 
+/* A counter name longer than the stored 63 characters must keep finding the
+ * counter it created. */
+#define LONG_COUNTER_NAME "inference.errors.model_tinyllama_1_1b_chat_q4_0.backend_cpu.thread_0"
+
+static void test_obs_lite_long_counter_name(void)
+{
+    TEST(obs_lite_long_counter_name);
+    eai_min_obs_lite_t obs;
+    eai_min_obs_init(&obs);
+
+    for (int i = 0; i < 3; i++) {
+        if (eai_min_obs_counter_inc(&obs, LONG_COUNTER_NAME, 1) != EAI_OK) {
+            FAIL("counter_inc failed"); return;
+        }
+    }
+    if (obs.counter_count != 1) { FAIL("each counter_inc created a new counter"); return; }
+    if (eai_min_obs_counter_get(&obs, LONG_COUNTER_NAME) != 3) {
+        FAIL("counter_get did not return 3"); return;
+    }
+
+    eai_min_obs_counter_inc(&obs, "err", 1);
+    eai_min_obs_counter_inc(&obs, "errors", 5);
+    if (eai_min_obs_counter_get(&obs, "err") != 1 ||
+        eai_min_obs_counter_get(&obs, "errors") != 5) {
+        FAIL("prefix names were merged"); return;
+    }
+    PASS();
+}
+
 static void test_router_mode(void)
 {
     TEST(router_mode);
@@ -176,6 +205,7 @@ int main(void)
     printf("=== EAI Min Tests ===\n");
 
     test_memory_lite();
+    test_obs_lite_long_counter_name();
     test_router_mode();
     test_cloud_https_not_downgraded();
     test_load_unparseable_model_falls_back();

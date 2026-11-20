@@ -58,6 +58,64 @@ static void test_observability_counters(void)
     PASS();
 }
 
+/* A name longer than the stored 63 characters must keep finding the entry it
+ * created: one metric that accumulates, and a span that can be ended. */
+#define LONG_OBS_NAME "inference.latency.model_tinyllama_1_1b_chat_q4_0.backend_cpu.thread_0"
+
+static void test_observability_long_metric_name(void)
+{
+    TEST(observability_long_metric_name);
+    eai_fw_observability_t obs;
+    eai_fw_obs_init(&obs, true);
+
+    for (int i = 0; i < 3; i++) {
+        if (eai_fw_obs_counter_inc(&obs, LONG_OBS_NAME, 1.0) != EAI_OK) {
+            FAIL("counter_inc failed"); return;
+        }
+    }
+    if (obs.metric_count != 1) { FAIL("each counter_inc created a new metric"); return; }
+    if (obs.metrics[0].value != 3.0) { FAIL("counter did not accumulate to 3"); return; }
+
+    eai_fw_obs_init(&obs, true);
+    eai_fw_obs_gauge_set(&obs, LONG_OBS_NAME, 1.0);
+    eai_fw_obs_gauge_set(&obs, LONG_OBS_NAME, 2.0);
+    if (obs.metric_count != 1) { FAIL("each gauge_set created a new metric"); return; }
+    if (obs.metrics[0].value != 2.0) { FAIL("gauge does not hold the last value"); return; }
+    PASS();
+}
+
+static void test_observability_long_span_name(void)
+{
+    TEST(observability_long_span_name);
+    eai_fw_observability_t obs;
+    eai_fw_obs_init(&obs, true);
+
+    if (eai_fw_obs_span_start(&obs, LONG_OBS_NAME, NULL) != EAI_OK) {
+        FAIL("span_start failed"); return;
+    }
+    if (eai_fw_obs_span_end(&obs, LONG_OBS_NAME) != EAI_OK) {
+        FAIL("span_end did not find the span it started"); return;
+    }
+    if (obs.spans[0].active) { FAIL("span still active"); return; }
+    PASS();
+}
+
+static void test_observability_short_names_stay_distinct(void)
+{
+    TEST(observability_short_names_stay_distinct);
+    eai_fw_observability_t obs;
+    eai_fw_obs_init(&obs, true);
+
+    eai_fw_obs_counter_inc(&obs, "req", 1.0);
+    eai_fw_obs_counter_inc(&obs, "requests", 1.0);
+    eai_fw_obs_counter_inc(&obs, "req", 1.0);
+    if (obs.metric_count != 2) { FAIL("expected two metrics"); return; }
+    if (obs.metrics[0].value != 2.0 || obs.metrics[1].value != 1.0) {
+        FAIL("prefix names were merged"); return;
+    }
+    PASS();
+}
+
 static void test_fed_aggregate_skips_removed_participant(void)
 {
     TEST(fed_aggregate_skips_removed_participant);
@@ -149,6 +207,9 @@ int main(void)
     test_policy_init();
     test_policy_check();
     test_observability_counters();
+    test_observability_long_metric_name();
+    test_observability_long_span_name();
+    test_observability_short_names_stay_distinct();
     test_fed_aggregate_skips_removed_participant();
     test_fw_mem_update_to_no_ttl_is_saved();
     test_fw_mem_update_to_ttl_is_not_saved();
