@@ -15,7 +15,9 @@ class BciPipeline:
     """
 
     def __init__(self, device="simulator", decoder="threshold", output="log",
-                 lib_path=None, simulator=True):
+                 lib_path=None, simulator=False):
+        # device already defaults to the simulator; simulator=True forces it
+        # whatever device is named.
         if simulator:
             device = "simulator"
         self._lib = BciLib(lib_path)
