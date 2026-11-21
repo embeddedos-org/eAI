@@ -37,12 +37,20 @@ eai_status_t eai_fw_obs_init(eai_fw_observability_t *obs, bool enabled)
     return EAI_OK;
 }
 
+/* Names are stored cut to size - 1 characters, so compare only that many:
+ * a longer name must find the entry it created, not miss it with strcmp(). */
+static bool stored_name_matches(const char *stored, const char *name, size_t size)
+{
+    return strncmp(stored, name, size - 1) == 0;
+}
+
 static eai_metric_t *find_or_create_metric(eai_fw_observability_t *obs,
                                             const char *name,
                                             eai_metric_type_t type)
 {
     for (int i = 0; i < obs->metric_count; i++) {
-        if (strcmp(obs->metrics[i].name, name) == 0) return &obs->metrics[i];
+        if (stored_name_matches(obs->metrics[i].name, name, EAI_OBS_METRIC_NAME))
+            return &obs->metrics[i];
     }
     if (obs->metric_count >= EAI_OBS_MAX_METRICS) return NULL;
 
@@ -94,7 +102,8 @@ eai_status_t eai_fw_obs_span_end(eai_fw_observability_t *obs, const char *name)
     if (!obs || !obs->enabled || !name) return EAI_ERR_INVALID;
 
     for (int i = obs->span_count - 1; i >= 0; i--) {
-        if (obs->spans[i].active && strcmp(obs->spans[i].name, name) == 0) {
+        if (obs->spans[i].active &&
+            stored_name_matches(obs->spans[i].name, name, EAI_OBS_SPAN_NAME)) {
             obs->spans[i].end_us = get_time_us();
             obs->spans[i].active = false;
             EAI_LOG_DEBUG(LOG_MOD, "span '%s' duration=%llu us",
