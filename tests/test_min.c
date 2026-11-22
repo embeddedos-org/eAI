@@ -36,6 +36,52 @@ static void test_memory_lite(void)
     PASS();
 }
 
+/* A memory key longer than the stored 63 characters must not be stored as
+ * an entry that get() can never find and every set() duplicates. */
+#define MEM_KEY_63 "sensor.calibration.thermistor_ntc_10k_beta_3950.channel_0_offse"
+#define MEM_KEY_70 "sensor.calibration.thermistor_ntc_10k_beta_3950.channel_0_offset_deg_c"
+
+static void test_memory_lite_long_key(void)
+{
+    TEST(memory_lite_long_key);
+    static eai_mem_lite_t mem;
+    eai_mem_lite_init(&mem, NULL);
+
+    if (strlen(MEM_KEY_63) != EAI_MEM_KEY_MAX - 1 || strlen(MEM_KEY_70) != 70) {
+        FAIL("test key lengths are wrong"); return;
+    }
+
+    /* The longest key that fits still round-trips and updates in place. */
+    if (eai_mem_lite_set(&mem, MEM_KEY_63, "0.25", true) != EAI_OK ||
+        eai_mem_lite_set(&mem, MEM_KEY_63, "0.50", true) != EAI_OK) {
+        FAIL("set of a 63-character key failed"); return;
+    }
+    const char *v = eai_mem_lite_get(&mem, MEM_KEY_63);
+    if (!v || strcmp(v, "0.50") != 0 || eai_mem_lite_count(&mem) != 1) {
+        FAIL("63-character key did not round-trip"); return;
+    }
+
+    /* A 70-character key: set() must report the failure, not return OK
+     * and leave an unreachable (and, on every call, duplicated) entry. */
+    for (int i = 0; i < 3; i++) {
+        if (eai_mem_lite_set(&mem, MEM_KEY_70, "1.5", true) != EAI_ERR_INVALID) {
+            FAIL("set of a 70-character key returned OK but get() cannot find it");
+            return;
+        }
+    }
+    if (eai_mem_lite_count(&mem) != 1) {
+        FAIL("set of a 70-character key added entries"); return;
+    }
+    if (eai_mem_lite_get(&mem, MEM_KEY_70) != NULL) {
+        FAIL("get of a 70-character key found something"); return;
+    }
+    v = eai_mem_lite_get(&mem, MEM_KEY_63);
+    if (!v || strcmp(v, "0.50") != 0) {
+        FAIL("70-character key changed the 63-character entry"); return;
+    }
+    PASS();
+}
+
 /* A counter name longer than the stored 63 characters must keep finding the
  * counter it created. */
 #define LONG_COUNTER_NAME "inference.errors.model_tinyllama_1_1b_chat_q4_0.backend_cpu.thread_0"
@@ -205,6 +251,7 @@ int main(void)
     printf("=== EAI Min Tests ===\n");
 
     test_memory_lite();
+    test_memory_lite_long_key();
     test_obs_lite_long_counter_name();
     test_router_mode();
     test_cloud_https_not_downgraded();

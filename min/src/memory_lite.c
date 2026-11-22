@@ -23,6 +23,12 @@ eai_status_t eai_mem_lite_set(eai_mem_lite_t *mem, const char *key, const char *
 {
     if (!mem || !key || !value) return EAI_ERR_INVALID;
 
+    /* A key is stored cut to EAI_MEM_KEY_MAX - 1 characters, and get(),
+     * delete() and the update below compare the whole key. A longer key
+     * could never be found again, and each set() would add another entry,
+     * so refuse it instead of storing an entry nobody can reach. */
+    if (strlen(key) >= EAI_MEM_KEY_MAX) return EAI_ERR_INVALID;
+
     /* update existing entry */
     for (int i = 0; i < mem->count; i++) {
         if (strcmp(mem->entries[i].key, key) == 0) {
