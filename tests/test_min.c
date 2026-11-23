@@ -111,6 +111,62 @@ static void test_obs_lite_long_counter_name(void)
     PASS();
 }
 
+/* A sensor name longer than the stored 63 characters must not be registered
+ * as a sensor that eai_sensor_read() can never find. */
+#define SENSOR_NAME_63 "board0.i2c1.bme280_0x76.ambient_temperature_degrees_celsius_raw"
+#define SENSOR_NAME_70 "board0.i2c1.bme280_0x76.ambient_temperature_degrees_celsius_raw_avg_1s"
+
+static eai_status_t fixed_sensor_read(int sensor_id, float *value, void *user_data)
+{
+    (void)sensor_id;
+    *value = *(const float *)user_data;
+    return EAI_OK;
+}
+
+static void test_sensor_long_name(void)
+{
+    TEST(sensor_long_name);
+    static eai_sensor_registry_t reg;
+    static float reading = 21.5f;
+    float v = 0.0f;
+    eai_sensor_registry_init(&reg);
+
+    if (strlen(SENSOR_NAME_63) != EAI_SENSOR_NAME_MAX - 1 || strlen(SENSOR_NAME_70) != 70) {
+        FAIL("test name lengths are wrong"); return;
+    }
+
+    /* The longest name that fits registers once and can be read back. */
+    if (eai_sensor_register(&reg, SENSOR_NAME_63, EAI_SENSOR_TEMPERATURE,
+                            fixed_sensor_read, &reading) != EAI_OK) {
+        FAIL("register of a 63-character name failed"); return;
+    }
+    if (eai_sensor_register(&reg, SENSOR_NAME_63, EAI_SENSOR_TEMPERATURE,
+                            fixed_sensor_read, &reading) == EAI_OK) {
+        FAIL("63-character name registered twice"); return;
+    }
+    if (eai_sensor_read(&reg, SENSOR_NAME_63, &v) != EAI_OK || v != 21.5f) {
+        FAIL("63-character name could not be read"); return;
+    }
+
+    /* A 70-character name: register must report the failure, not return OK
+     * and leave a sensor that read() cannot find (and, on every call, add
+     * another one). */
+    for (int i = 0; i < 3; i++) {
+        if (eai_sensor_register(&reg, SENSOR_NAME_70, EAI_SENSOR_TEMPERATURE,
+                                fixed_sensor_read, &reading) != EAI_ERR_INVALID) {
+            FAIL("register of a 70-character name returned OK but read() cannot find it");
+            return;
+        }
+    }
+    if (reg.count != 1 || eai_sensor_count_active(&reg) != 1) {
+        FAIL("register of a 70-character name added sensors"); return;
+    }
+    if (eai_sensor_find(&reg, SENSOR_NAME_70) != NULL) {
+        FAIL("find of a 70-character name found something"); return;
+    }
+    PASS();
+}
+
 static void test_router_mode(void)
 {
     TEST(router_mode);
@@ -253,6 +309,7 @@ int main(void)
     test_memory_lite();
     test_memory_lite_long_key();
     test_obs_lite_long_counter_name();
+    test_sensor_long_name();
     test_router_mode();
     test_cloud_https_not_downgraded();
     test_load_unparseable_model_falls_back();
