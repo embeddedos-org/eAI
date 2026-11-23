@@ -46,6 +46,13 @@ eai_status_t eai_sensor_register(eai_sensor_registry_t *reg, const char *name,
                                   eai_sensor_type_t type, eai_sensor_read_fn read_fn,
                                   void *user_data) {
     if (!reg || !name || !read_fn) return EAI_ERR_INVALID;
+
+    /* The name is stored cut to EAI_SENSOR_NAME_MAX - 1 characters, and
+     * eai_sensor_find() and the duplicate check below compare the whole
+     * name. A longer name could never be read, calibrated or registered
+     * only once, so refuse it instead of adding a sensor nobody can reach. */
+    if (strlen(name) >= EAI_SENSOR_NAME_MAX) return EAI_ERR_INVALID;
+
     if (reg->count >= EAI_SENSOR_MAX) return EAI_ERR_NOMEM;
 
     for (int i = 0; i < reg->count; i++) {
