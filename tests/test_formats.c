@@ -53,6 +53,52 @@ static const char *create_test_gguf(void)
     return path;
 }
 
+/* Helper: create a GGUF file holding exactly one 2x2 tensor of the given GGML
+ * element type. Enough of the format to drive eai_gguf_get_tensor(): header,
+ * zero KV pairs, one tensor-info record, then an aligned data section. */
+static const char *create_gguf_with_tensor(int ggml_type)
+{
+    static const char *path = "test_dtype.gguf";
+    FILE *fp = fopen(path, "wb");
+    if (!fp) return NULL;
+
+    uint32_t magic = 0x46554747;
+    uint32_t version = 3;
+    uint64_t n_tensors = 1;
+    uint64_t n_kv = 0;
+    fwrite(&magic, 4, 1, fp);
+    fwrite(&version, 4, 1, fp);
+    fwrite(&n_tensors, 8, 1, fp);
+    fwrite(&n_kv, 8, 1, fp);
+
+    const char *tname = "blk.0.weight";
+    uint64_t name_len = strlen(tname);
+    fwrite(&name_len, 8, 1, fp);
+    fwrite(tname, 1, (size_t)name_len, fp);
+
+    uint32_t ndim = 2;
+    fwrite(&ndim, 4, 1, fp);
+    uint64_t shape[2] = { 2, 2 };
+    fwrite(shape, 8, 2, fp);
+
+    uint32_t dtype = (uint32_t)ggml_type;
+    fwrite(&dtype, 4, 1, fp);
+
+    uint64_t offset = 0;
+    fwrite(&offset, 8, 1, fp);
+
+    /* Pad to the 32-byte data alignment, then write a data section. */
+    long pos = ftell(fp);
+    long aligned = (pos + 31) & ~31L;
+    for (long i = pos; i < aligned; i++) fputc(0, fp);
+    uint8_t payload[64];
+    memset(payload, 0x5a, sizeof(payload));
+    fwrite(payload, 1, sizeof(payload), fp);
+
+    fclose(fp);
+    return path;
+}
+
 /* Helper: create a minimal file that looks like ONNX (protobuf) */
 static const char *create_test_onnx(void)
 {
@@ -71,8 +117,109 @@ static const char *create_test_onnx(void)
 static void cleanup_test_files(void)
 {
     remove("test_model.gguf");
+    remove("test_dtype.gguf");
     remove("test_model.onnx");
     remove("test_bad_magic.bin");
+}
+
+/* ---- GGUF tensor dtype tests ---- */
+
+/* eai_gguf_get_tensor() used to hardcode tensor->dtype = EAI_DTYPE_F32 and
+ * discard the GGML type the tensor-info record carries. Almost every published
+ * GGUF model is quantised, so that told callers a Q4_K or Q8_0 tensor was
+ * float32 - which both misreads the bytes and overstates the tensor's length,
+ * since a caller sizes the buffer from shape x sizeof(dtype). These pin that
+ * the real type is reported, and that a type eai_dtype_t cannot describe is
+ * refused rather than defaulted. */
+
+struct dtype_case { int ggml; eai_dtype_t expect; const char *label; };
+
+static void test_gguf_tensor_reports_mapped_dtypes(void)
+{
+    TEST(gguf_tensor_reports_mapped_dtypes);
+    static const struct dtype_case cases[] = {
+        { GGML_TYPE_F32,  EAI_DTYPE_F32,   "F32"  },
+        { GGML_TYPE_F16,  EAI_DTYPE_F16,   "F16"  },
+        { GGML_TYPE_BF16, EAI_DTYPE_BF16,  "BF16" },
+        { GGML_TYPE_Q4_0, EAI_DTYPE_Q4_0,  "Q4_0" },
+        { GGML_TYPE_Q4_1, EAI_DTYPE_Q4_1,  "Q4_1" },
+        { GGML_TYPE_Q8_0, EAI_DTYPE_Q8_0,  "Q8_0" },
+        { GGML_TYPE_I8,   EAI_DTYPE_INT8,  "I8"   },
+        { GGML_TYPE_I32,  EAI_DTYPE_INT32, "I32"  },
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        const char *path = create_gguf_with_tensor(cases[i].ggml);
+        if (!path) { FAIL("cannot create fixture"); return; }
+
+        gguf_context_t ctx;
+        if (eai_gguf_load(path, &ctx) != EAI_OK) { FAIL(cases[i].label); return; }
+
+        eai_tensor_t t;
+        eai_status_t st = eai_gguf_get_tensor(&ctx, "blk.0.weight", &t);
+        if (st != EAI_OK) { FAIL(cases[i].label); eai_gguf_free(&ctx); return; }
+        if (t.dtype != cases[i].expect) { FAIL(cases[i].label); eai_gguf_free(&ctx); return; }
+        if (t.ndim != 2) { FAIL("ndim"); eai_gguf_free(&ctx); return; }
+        eai_gguf_free(&ctx);
+    }
+    PASS();
+}
+
+static void test_gguf_tensor_refuses_types_it_cannot_describe(void)
+{
+    TEST(gguf_tensor_refuses_types_it_cannot_describe);
+    /* Real GGUF element types with no eai_dtype_t equivalent. Q4_K and Q6_K in
+     * particular are what mainstream quantised models actually ship as, so
+     * this is the common case, not an exotic one. */
+    static const int unsupported[] = {
+        GGML_TYPE_Q5_0, GGML_TYPE_Q5_1, GGML_TYPE_Q2_K, GGML_TYPE_Q3_K,
+        GGML_TYPE_Q4_K, GGML_TYPE_Q5_K, GGML_TYPE_Q6_K, GGML_TYPE_IQ4_XS,
+        GGML_TYPE_I16,  GGML_TYPE_I64,  GGML_TYPE_F64,
+    };
+
+    for (size_t i = 0; i < sizeof(unsupported) / sizeof(unsupported[0]); i++) {
+        const char *path = create_gguf_with_tensor(unsupported[i]);
+        if (!path) { FAIL("cannot create fixture"); return; }
+
+        gguf_context_t ctx;
+        if (eai_gguf_load(path, &ctx) != EAI_OK) { FAIL("load"); return; }
+
+        eai_tensor_t t;
+        memset(&t, 0xA5, sizeof(t));
+        eai_status_t st = eai_gguf_get_tensor(&ctx, "blk.0.weight", &t);
+        if (st == EAI_OK) { FAIL("accepted an unmappable GGML type"); eai_gguf_free(&ctx); return; }
+        if (st != EAI_ERR_UNSUPPORTED) { FAIL("wrong status"); eai_gguf_free(&ctx); return; }
+        /* A refused tensor must not leave a data pointer behind. */
+        if (t.data != NULL) { FAIL("data pointer set on refusal"); eai_gguf_free(&ctx); return; }
+        eai_gguf_free(&ctx);
+    }
+    PASS();
+}
+
+static void test_gguf_quantised_tensor_is_not_reported_as_f32(void)
+{
+    /* The defect stated directly: before the fix every one of these came back
+     * EAI_OK with dtype EAI_DTYPE_F32. */
+    TEST(gguf_quantised_tensor_is_not_reported_as_f32);
+    static const int quantised[] = { GGML_TYPE_Q4_0, GGML_TYPE_Q8_0, GGML_TYPE_Q4_K, GGML_TYPE_Q6_K };
+
+    for (size_t i = 0; i < sizeof(quantised) / sizeof(quantised[0]); i++) {
+        const char *path = create_gguf_with_tensor(quantised[i]);
+        if (!path) { FAIL("cannot create fixture"); return; }
+
+        gguf_context_t ctx;
+        if (eai_gguf_load(path, &ctx) != EAI_OK) { FAIL("load"); return; }
+
+        eai_tensor_t t;
+        eai_status_t st = eai_gguf_get_tensor(&ctx, "blk.0.weight", &t);
+        if (st == EAI_OK && t.dtype == EAI_DTYPE_F32) {
+            FAIL("quantised tensor reported as F32");
+            eai_gguf_free(&ctx);
+            return;
+        }
+        eai_gguf_free(&ctx);
+    }
+    PASS();
 }
 
 /* ---- GGUF loader tests ---- */
@@ -401,6 +548,9 @@ int main(void)
     test_gguf_get_int_default();
     test_gguf_get_tensor_nonexistent();
     test_gguf_get_tensor_null_params();
+    test_gguf_tensor_reports_mapped_dtypes();
+    test_gguf_tensor_refuses_types_it_cannot_describe();
+    test_gguf_quantised_tensor_is_not_reported_as_f32();
     test_gguf_free_null();
     test_gguf_free_double();
     test_onnx_load_null_path();

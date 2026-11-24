@@ -238,6 +238,33 @@ int eai_gguf_get_int(const gguf_context_t *ctx, const char *key, int default_val
     return default_val;
 }
 
+/* Map a GGML element type onto the eai_dtype_t that describes it.
+ *
+ * Only an exact correspondence is a mapping. A GGUF file is untrusted input
+ * and most published models are quantised, so guessing here is worse than
+ * refusing: a caller told a Q4_K tensor is EAI_DTYPE_F32 will read eight times
+ * the bytes the tensor occupies and interpret packed 4-bit blocks as floats.
+ * Returns EAI_ERR_UNSUPPORTED - never a default - when nothing fits. */
+static eai_status_t ggml_to_eai_dtype(int ggml_type, eai_dtype_t *out)
+{
+    switch (ggml_type) {
+    case GGML_TYPE_F32:  *out = EAI_DTYPE_F32;   return EAI_OK;
+    case GGML_TYPE_F16:  *out = EAI_DTYPE_F16;   return EAI_OK;
+    case GGML_TYPE_BF16: *out = EAI_DTYPE_BF16;  return EAI_OK;
+    case GGML_TYPE_Q4_0: *out = EAI_DTYPE_Q4_0;  return EAI_OK;
+    case GGML_TYPE_Q4_1: *out = EAI_DTYPE_Q4_1;  return EAI_OK;
+    case GGML_TYPE_Q8_0: *out = EAI_DTYPE_Q8_0;  return EAI_OK;
+    case GGML_TYPE_I8:   *out = EAI_DTYPE_INT8;  return EAI_OK;
+    case GGML_TYPE_I32:  *out = EAI_DTYPE_INT32; return EAI_OK;
+    default:
+        /* Q5_*, the K-quants, the IQ-quants, I16/I64/F64: real GGUF types
+         * with no eai_dtype_t. EAI_DTYPE_INT4 is deliberately not used as a
+         * stand-in for the 4-bit quants - it does not describe their block
+         * layout. */
+        return EAI_ERR_UNSUPPORTED;
+    }
+}
+
 eai_status_t eai_gguf_get_tensor(const gguf_context_t *ctx, const char *name, eai_tensor_t *tensor)
 {
     if (!ctx || !name || !tensor) return EAI_ERR_INVALID;
@@ -247,7 +274,15 @@ eai_status_t eai_gguf_get_tensor(const gguf_context_t *ctx, const char *name, ea
             gguf_tensor_info_t *ti = &ctx->tensors[i];
 
             memset(tensor, 0, sizeof(*tensor));
-            tensor->dtype = EAI_DTYPE_F32; /* TODO: map GGML dtype */
+
+            eai_dtype_t dtype;
+            eai_status_t dst = ggml_to_eai_dtype(ti->dtype, &dtype);
+            if (dst != EAI_OK) {
+                /* Leave the caller a zeroed tensor with a NULL data pointer
+                 * rather than one that misdescribes the bytes behind it. */
+                return dst;
+            }
+            tensor->dtype = dtype;
             tensor->ndim = ti->ndim > EAI_TENSOR_MAX_DIMS
                          ? EAI_TENSOR_MAX_DIMS
                          : (ti->ndim < 0 ? 0 : ti->ndim);
