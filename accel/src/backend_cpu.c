@@ -16,11 +16,28 @@ static eai_status_t cpu_init(eai_accel_backend_t *backend, const eai_kv_t *confi
     return EAI_OK;
 }
 
+/* Number of input tensors the kernel for `type` reads, or 0 when this backend
+ * has no kernel for it. Every kernel below writes one output. */
+static int cpu_kernel_inputs(eai_op_type_t type)
+{
+    switch (type) {
+        case EAI_OP_MATMUL:
+        case EAI_OP_ADD:
+        case EAI_OP_MUL:
+            return 2;
+        case EAI_OP_RELU:
+        case EAI_OP_SOFTMAX:
+        case EAI_OP_LAYERNORM:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
 static bool cpu_can_handle(eai_accel_backend_t *backend, const eai_op_t *op)
 {
     (void)backend;
-    /* CPU can handle all operations */
-    return (op != NULL);
+    return (op != NULL) && cpu_kernel_inputs(op->type) > 0;
 }
 
 static eai_status_t cpu_prepare(eai_accel_backend_t *backend, const eai_compute_graph_t *graph)
@@ -92,10 +109,53 @@ static void cpu_layernorm_f32(const float *in, float *out, int n,
     }
 }
 
+/* A tensor a kernel may touch: inside the graph, backed by data, float32.
+ * The kernels cast `data` to float *, so any other dtype would be read and
+ * written past the end of a buffer that eai_tensor_create() sized by dtype. */
+static eai_status_t cpu_check_tensor(const eai_compute_graph_t *graph, int index)
+{
+    if (!graph->tensors || index < 0 || index >= graph->tensor_count)
+        return EAI_ERR_INVALID;
+    if (!graph->tensors[index].data)
+        return EAI_ERR_INVALID;
+    if (graph->tensors[index].dtype != EAI_DTYPE_F32)
+        return EAI_ERR_UNSUPPORTED;
+    return EAI_OK;
+}
+
+/* Check the whole graph before any kernel runs, so a graph that is refused
+ * has had none of its tensors written. */
+static eai_status_t cpu_check_graph(const eai_compute_graph_t *graph)
+{
+    for (int i = 0; i < graph->op_count; i++) {
+        const eai_op_t *op = &graph->ops[i];
+        int inputs = cpu_kernel_inputs(op->type);
+
+        if (inputs == 0) {
+            EAI_LOG_WARN(LOG_MOD, "no CPU kernel for op type: %d", op->type);
+            return EAI_ERR_UNSUPPORTED;
+        }
+        if (op->input_count < inputs || op->output_count < 1 ||
+            !op->input_indices || !op->output_indices)
+            return EAI_ERR_INVALID;
+
+        for (int j = 0; j < inputs; j++) {
+            eai_status_t st = cpu_check_tensor(graph, op->input_indices[j]);
+            if (st != EAI_OK) return st;
+        }
+        eai_status_t st = cpu_check_tensor(graph, op->output_indices[0]);
+        if (st != EAI_OK) return st;
+    }
+    return EAI_OK;
+}
+
 static eai_status_t cpu_execute(eai_accel_backend_t *backend, const eai_compute_graph_t *graph)
 {
     if (!graph || !graph->ops) return EAI_ERR_INVALID;
     (void)backend;
+
+    eai_status_t check = cpu_check_graph(graph);
+    if (check != EAI_OK) return check;
 
     for (int i = 0; i < graph->op_count; i++) {
         const eai_op_t *op = &graph->ops[i];
@@ -153,8 +213,8 @@ static eai_status_t cpu_execute(eai_accel_backend_t *backend, const eai_compute_
                 break;
             }
             default:
-                EAI_LOG_WARN(LOG_MOD, "unhandled op type: %d", op->type);
-                break;
+                /* Not reachable: cpu_check_graph() refused the graph. */
+                return EAI_ERR_UNSUPPORTED;
         }
     }
 
