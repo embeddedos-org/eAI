@@ -591,15 +591,56 @@ static void test_cpu_refuses_tensor_index_out_of_range(void)
         .type = EAI_OP_RELU, .input_count = 1, .output_count = 1,
         .input_indices = in_idx, .output_indices = out_idx,
     };
-    eai_tensor_t tensors[] = {in, out};
+    /* On the heap, so that reading tensors[5] or tensors[-1] is an error a
+     * sanitizer build reports rather than a read of whatever is on the stack. */
+    eai_tensor_t *tensors = malloc(2 * sizeof(*tensors));
+    if (!tensors) { FAIL("malloc"); return; }
+    tensors[0] = in;
+    tensors[1] = out;
     eai_compute_graph_t graph = { .ops = &op, .op_count = 1, .tensors = tensors, .tensor_count = 2 };
 
     eai_status_t st = eai_accel_dispatch(&graph);
     if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for tensor index 5 of 2"); goto cleanup; }
+
+    in_idx[0] = -1;
+    st = eai_accel_dispatch(&graph);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for tensor index -1"); goto cleanup; }
     PASS();
 cleanup:
     eai_tensor_destroy(&tensors[0]);
     eai_tensor_destroy(&tensors[1]);
+    free(tensors);
+}
+
+/* A tensor that was never given a buffer (or was destroyed) is refused, not
+ * dereferenced. */
+static void test_cpu_refuses_tensor_without_data(void)
+{
+    TEST(cpu_refuses_tensor_without_data);
+    ensure_cpu_registered();
+
+    int64_t shape[] = {4};
+    eai_tensor_t in, out;
+    eai_tensor_create(&in, EAI_DTYPE_F32, shape, 1);
+    memset(&out, 0, sizeof(out));
+    out.dtype = EAI_DTYPE_F32;
+    out.ndim = 1;
+    out.shape[0] = 4;
+
+    int in_idx[] = {0};
+    int out_idx[] = {1};
+    eai_op_t op = {
+        .type = EAI_OP_RELU, .input_count = 1, .output_count = 1,
+        .input_indices = in_idx, .output_indices = out_idx,
+    };
+    eai_tensor_t tensors[] = {in, out};
+    eai_compute_graph_t graph = { .ops = &op, .op_count = 1, .tensors = tensors, .tensor_count = 2 };
+
+    eai_status_t st = eai_accel_dispatch(&graph);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for a tensor with no data"); goto cleanup; }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&tensors[0]);
 }
 
 /* The graph is checked as a whole before any kernel runs: a graph whose
@@ -674,6 +715,7 @@ int main(void)
     test_cpu_refuses_unimplemented_op();
     test_cpu_refuses_non_f32_tensor();
     test_cpu_refuses_tensor_index_out_of_range();
+    test_cpu_refuses_tensor_without_data();
     test_cpu_runs_no_op_of_a_graph_it_refuses();
     test_graph_destroy_null();
     test_graph_destroy_empty();
