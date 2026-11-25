@@ -302,6 +302,83 @@ static void test_load_mismatched_bias_model_falls_back(void)
     remove(path);
 }
 
+/* After a "CALL:<tool>(...)" reply the agent runs the tool and thinks again.
+ * The next prompt has to carry the tool's result: the agent used to rebuild
+ * it from the goal alone, so the model never saw the result, asked for the
+ * same call again, and the run ended at max_iterations with the model's
+ * question unanswered. This scripted model answers only once the prompt
+ * contains the result. */
+static char agent_prompts[4][EAI_AGENT_PROMPT_MAX];
+static int  agent_infer_calls;
+
+static eai_status_t scripted_infer(eai_runtime_t *rt, const eai_inference_input_t *in,
+                                   eai_inference_output_t *out)
+{
+    (void)rt;
+    if (agent_infer_calls < 4) {
+        snprintf(agent_prompts[agent_infer_calls], sizeof(agent_prompts[0]),
+                 "%.*s", (int)in->text_len, in->text);
+    }
+    agent_infer_calls++;
+    const char *reply = strstr(in->text, "Tool clock.now returned: 12:34")
+                            ? "It is 12:34."
+                            : "CALL:clock.now()";
+    snprintf(out->text, sizeof(out->text), "%s", reply);
+    out->text_len = strlen(out->text);
+    return EAI_OK;
+}
+
+static const eai_runtime_ops_t scripted_ops = { .name = "scripted", .infer = scripted_infer };
+
+static eai_status_t clock_now_exec(const eai_kv_t *args, int arg_count,
+                                   eai_tool_result_t *result)
+{
+    (void)args; (void)arg_count;
+    snprintf(result->data, sizeof(result->data), "12:34");
+    result->len = strlen(result->data);
+    return EAI_OK;
+}
+
+static void test_agent_tool_result_reaches_model(void)
+{
+    TEST(agent_tool_result_reaches_model);
+    eai_min_runtime_t rt;
+    memset(&rt, 0, sizeof(rt));
+    rt.base.ops = &scripted_ops;
+    rt.base.loaded = true;
+    rt.initialized = true;
+
+    eai_tool_registry_t tools;
+    eai_tool_registry_init(&tools);
+    eai_tool_t clock_tool = {0};
+    snprintf(clock_tool.name, sizeof(clock_tool.name), "clock.now");
+    clock_tool.exec = clock_now_exec;
+    if (eai_tool_register(&tools, &clock_tool) != EAI_OK) { FAIL("tool register failed"); return; }
+
+    eai_min_agent_t agent;
+    eai_min_agent_init(&agent, &rt, &tools, NULL);
+    agent_infer_calls = 0;
+    eai_agent_task_t task = { .goal = "What time is it?", .max_iterations = 6 };
+
+    eai_status_t st = eai_min_agent_run(&agent, &task);
+    if (st != EAI_OK) { FAIL("agent run failed"); return; }
+    if (agent_infer_calls < 2) { FAIL("agent did not think again after the tool call"); return; }
+    if (!strstr(agent_prompts[1], "Tool clock.now returned: 12:34")) {
+        FAIL("prompt after the tool call does not contain the tool's result"); return;
+    }
+    if (strcmp(eai_min_agent_output(&agent), "It is 12:34.") != 0) {
+        char msg[160];
+        snprintf(msg, sizeof(msg), "final output is \"%.100s\" after %d model calls",
+                 eai_min_agent_output(&agent), agent_infer_calls);
+        FAIL(msg); return;
+    }
+    if (agent_infer_calls != 2) { FAIL("expected exactly two model calls"); return; }
+    if (strstr(agent_prompts[0], "Tool clock.now returned")) {
+        FAIL("first prompt must not carry a tool result"); return;
+    }
+    PASS();
+}
+
 int main(void)
 {
     printf("=== EAI Min Tests ===\n");
@@ -316,6 +393,7 @@ int main(void)
     test_load_missing_model_falls_back();
     test_load_empty_model_falls_back();
     test_load_mismatched_bias_model_falls_back();
+    test_agent_tool_result_reaches_model();
 
     printf("\nResults: %d/%d passed, %d failed\n", tests_passed, tests_run, tests_failed);
     return tests_failed > 0 ? 1 : 0;
