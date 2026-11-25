@@ -685,6 +685,379 @@ cleanup:
     eai_tensor_destroy(&tensors[2]);
 }
 
+/* ---- The CPU kernels do not trust tensor shapes (#94) ----
+ *
+ * cpu_execute() took an element count or a dimension from one operand and
+ * applied it to the others. Each test below is one row of the table in #94;
+ * every one of them wrote or read past a heap buffer before the fix, which
+ * `-fsanitize=address` reports as a heap-buffer-overflow in the kernel.
+ *
+ * These assert on the returned status, so they fail on the unfixed backend
+ * without needing a sanitizer: it returned EAI_OK for every one of them.
+ */
+
+/* Build a float32 tensor whose buffer is deliberately larger than the shape
+ * it reports, with a known pattern past the end. data_size stays honest, so
+ * the backend sees the real size while an overrun lands somewhere observable
+ * instead of in the allocator's metadata. */
+#define CANARY_BYTE 0xC7
+
+static eai_status_t dispatch_binary(eai_op_type_t type, eai_tensor_t *tensors,
+                                    int tensor_count, int a, int b, int out)
+{
+    int in_idx[2] = {a, b};
+    int out_idx[1] = {out};
+    eai_op_t op = {
+        .type = type, .input_count = 2, .output_count = 1,
+        .input_indices = in_idx, .output_indices = out_idx,
+    };
+    eai_compute_graph_t graph = {
+        .ops = &op, .op_count = 1,
+        .tensors = tensors, .tensor_count = tensor_count,
+    };
+    return eai_accel_dispatch(&graph);
+}
+
+static eai_status_t dispatch_unary(eai_op_type_t type, eai_tensor_t *tensors,
+                                   int tensor_count, int in, int out)
+{
+    int in_idx[1] = {in};
+    int out_idx[1] = {out};
+    eai_op_t op = {
+        .type = type, .input_count = 1, .output_count = 1,
+        .input_indices = in_idx, .output_indices = out_idx,
+    };
+    eai_compute_graph_t graph = {
+        .ops = &op, .op_count = 1,
+        .tensors = tensors, .tensor_count = tensor_count,
+    };
+    return eai_accel_dispatch(&graph);
+}
+
+/* ADD over a[8], b[4], c[4]: the loop ran numel(a) = 8 times over buffers
+ * holding 4 floats. The headline reproduction in #94. */
+static void test_cpu_refuses_elementwise_shape_mismatch(void)
+{
+    TEST(cpu_refuses_elementwise_shape_mismatch);
+    ensure_cpu_registered();
+
+    int64_t s8[] = {8}, s4[] = {4};
+    eai_tensor_t a, b, c;
+    eai_tensor_create(&a, EAI_DTYPE_F32, s8, 1);
+    eai_tensor_create(&b, EAI_DTYPE_F32, s4, 1);
+    eai_tensor_create(&c, EAI_DTYPE_F32, s4, 1);
+    eai_tensor_t tensors[] = {a, b, c};
+
+    eai_status_t st = dispatch_binary(EAI_OP_ADD, tensors, 3, 0, 1, 2);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for ADD a[8]+b[4]"); goto cleanup; }
+
+    /* MUL walks the same loop. */
+    st = dispatch_binary(EAI_OP_MUL, tensors, 3, 0, 1, 2);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for MUL a[8]*b[4]"); goto cleanup; }
+
+    /* An output too small for its inputs is the same defect. */
+    eai_tensor_t t2[] = {tensors[1], tensors[1], tensors[0]};
+    st = dispatch_binary(EAI_OP_ADD, t2, 3, 0, 1, 2);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for ADD b[4]+b[4] into c[8]"); goto cleanup; }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&tensors[0]);
+    eai_tensor_destroy(&tensors[1]);
+    eai_tensor_destroy(&tensors[2]);
+}
+
+/* The same overflow caught without a sanitizer: the output buffer is longer
+ * than the tensor says it is, and the bytes past the reported end carry a
+ * known pattern. The unfixed kernel wrote 8 floats into a 4-float tensor and
+ * destroyed it. */
+static void test_cpu_elementwise_mismatch_leaves_canary_intact(void)
+{
+    TEST(cpu_elementwise_mismatch_leaves_canary_intact);
+    ensure_cpu_registered();
+
+    enum { REPORTED = 4, ALLOCATED = 16 };
+    float *buf = malloc(ALLOCATED * sizeof(float));
+    if (!buf) { FAIL("malloc"); return; }
+    memset(buf, CANARY_BYTE, ALLOCATED * sizeof(float));
+
+    int64_t s8[] = {8};
+    eai_tensor_t a, b;
+    eai_tensor_create(&a, EAI_DTYPE_F32, s8, 1);
+    eai_tensor_create(&b, EAI_DTYPE_F32, s8, 1);
+    for (int i = 0; i < 8; i++) {
+        ((float *)a.data)[i] = 1.0f;
+        ((float *)b.data)[i] = 2.0f;
+    }
+
+    /* c reports 4 elements; its buffer really holds 16. */
+    eai_tensor_t c;
+    memset(&c, 0, sizeof(c));
+    c.dtype = EAI_DTYPE_F32;
+    c.ndim = 1;
+    c.shape[0] = REPORTED;
+    c.strides[0] = 1;
+    c.data = buf;
+    c.data_size = REPORTED * sizeof(float);
+    c.owns_data = false;
+
+    eai_tensor_t tensors[] = {a, b, c};
+    eai_status_t st = dispatch_binary(EAI_OP_ADD, tensors, 3, 0, 1, 2);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for ADD a[8]+b[8] into c[4]"); goto cleanup; }
+
+    /* Nothing at all should have been written: the graph was refused. */
+    const unsigned char *bytes = (const unsigned char *)buf;
+    for (size_t i = 0; i < ALLOCATED * sizeof(float); i++) {
+        if (bytes[i] != CANARY_BYTE) { FAIL("output buffer was written past its length"); goto cleanup; }
+    }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&tensors[0]);
+    eai_tensor_destroy(&tensors[1]);
+    free(buf);
+}
+
+/* RELU in[8] -> out[4]: the count came from the input alone. */
+static void test_cpu_refuses_unary_shape_mismatch(void)
+{
+    TEST(cpu_refuses_unary_shape_mismatch);
+    ensure_cpu_registered();
+
+    int64_t s8[] = {8}, s4[] = {4};
+    eai_tensor_t in, out;
+    eai_tensor_create(&in, EAI_DTYPE_F32, s8, 1);
+    eai_tensor_create(&out, EAI_DTYPE_F32, s4, 1);
+    eai_tensor_t tensors[] = {in, out};
+
+    eai_status_t st = dispatch_unary(EAI_OP_RELU, tensors, 2, 0, 1);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for RELU in[8] -> out[4]"); goto cleanup; }
+    st = dispatch_unary(EAI_OP_SOFTMAX, tensors, 2, 0, 1);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for SOFTMAX in[8] -> out[4]"); goto cleanup; }
+    st = dispatch_unary(EAI_OP_LAYERNORM, tensors, 2, 0, 1);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for LAYERNORM in[8] -> out[4]"); goto cleanup; }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&tensors[0]);
+    eai_tensor_destroy(&tensors[1]);
+}
+
+/* MATMUL a[2,3] x b[2,2]: K came from a, so the kernel read a row of b that
+ * does not exist. */
+static void test_cpu_refuses_matmul_inner_dimension_mismatch(void)
+{
+    TEST(cpu_refuses_matmul_inner_dimension_mismatch);
+    ensure_cpu_registered();
+
+    int64_t s23[] = {2, 3}, s22[] = {2, 2};
+    eai_tensor_t a, b, c;
+    eai_tensor_create(&a, EAI_DTYPE_F32, s23, 2);
+    eai_tensor_create(&b, EAI_DTYPE_F32, s22, 2);
+    eai_tensor_create(&c, EAI_DTYPE_F32, s22, 2);
+    eai_tensor_t tensors[] = {a, b, c};
+
+    eai_status_t st = dispatch_binary(EAI_OP_MATMUL, tensors, 3, 0, 1, 2);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for a[2,3] x b[2,2]"); goto cleanup; }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&tensors[0]);
+    eai_tensor_destroy(&tensors[1]);
+    eai_tensor_destroy(&tensors[2]);
+}
+
+/* MATMUL 2x2 inputs into a [1,1] output: four floats written into one. A
+ * 1-D operand is refused too - the kernel indexes shape[1] unconditionally. */
+static void test_cpu_refuses_matmul_output_shape_mismatch(void)
+{
+    TEST(cpu_refuses_matmul_output_shape_mismatch);
+    ensure_cpu_registered();
+
+    int64_t s22[] = {2, 2}, s11[] = {1, 1}, s4[] = {4};
+    eai_tensor_t a, b, small, flat;
+    eai_tensor_create(&a, EAI_DTYPE_F32, s22, 2);
+    eai_tensor_create(&b, EAI_DTYPE_F32, s22, 2);
+    eai_tensor_create(&small, EAI_DTYPE_F32, s11, 2);
+    eai_tensor_create(&flat, EAI_DTYPE_F32, s4, 1);
+    eai_tensor_t tensors[] = {a, b, small, flat};
+
+    eai_status_t st = dispatch_binary(EAI_OP_MATMUL, tensors, 4, 0, 1, 2);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for 2x2 x 2x2 -> [1,1]"); goto cleanup; }
+
+    st = dispatch_binary(EAI_OP_MATMUL, tensors, 4, 0, 1, 3);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for a 1-D matmul output"); goto cleanup; }
+
+    st = dispatch_binary(EAI_OP_MATMUL, tensors, 4, 3, 1, 0);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for a 1-D matmul input"); goto cleanup; }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&tensors[0]);
+    eai_tensor_destroy(&tensors[1]);
+    eai_tensor_destroy(&tensors[2]);
+    eai_tensor_destroy(&tensors[3]);
+}
+
+/* A tensor of shape {0} holds nothing, but cpu_softmax_f32 reads in[0]
+ * before its loop starts. */
+static void test_cpu_refuses_zero_element_tensor(void)
+{
+    TEST(cpu_refuses_zero_element_tensor);
+    ensure_cpu_registered();
+
+    int64_t s0[] = {0};
+    eai_tensor_t in, out;
+    eai_tensor_create(&in, EAI_DTYPE_F32, s0, 1);
+    eai_tensor_create(&out, EAI_DTYPE_F32, s0, 1);
+    eai_tensor_t tensors[] = {in, out};
+
+    eai_status_t st = dispatch_unary(EAI_OP_SOFTMAX, tensors, 2, 0, 1);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for a tensor of shape {0}"); goto cleanup; }
+    st = dispatch_unary(EAI_OP_LAYERNORM, tensors, 2, 0, 1);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for LAYERNORM on {0}"); goto cleanup; }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&tensors[0]);
+    eai_tensor_destroy(&tensors[1]);
+}
+
+/* A negative dimension made every loop bound in the kernels meaningless and
+ * still reported EAI_OK. */
+static void test_cpu_refuses_negative_dimension(void)
+{
+    TEST(cpu_refuses_negative_dimension);
+    ensure_cpu_registered();
+
+    int64_t s4[] = {4};
+    eai_tensor_t in, out;
+    eai_tensor_create(&in, EAI_DTYPE_F32, s4, 1);
+    eai_tensor_create(&out, EAI_DTYPE_F32, s4, 1);
+    eai_tensor_t tensors[] = {in, out};
+    tensors[0].shape[0] = -1;
+    tensors[1].shape[0] = -1;
+
+    eai_status_t st = dispatch_unary(EAI_OP_SOFTMAX, tensors, 2, 0, 1);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for shape[0] = -1"); goto cleanup; }
+    PASS();
+cleanup:
+    tensors[0].shape[0] = 4;
+    tensors[1].shape[0] = 4;
+    eai_tensor_destroy(&tensors[0]);
+    eai_tensor_destroy(&tensors[1]);
+}
+
+/* eai_tensor_numel() returns int64_t and every kernel call casts it to int.
+ * An element count of 2^32 + 1000 truncated to 1000 and walked a buffer
+ * sized for neither number. */
+static void test_cpu_refuses_element_count_that_overflows_int(void)
+{
+    TEST(cpu_refuses_element_count_that_overflows_int);
+    ensure_cpu_registered();
+
+    int64_t s4[] = {4};
+    eai_tensor_t in, out;
+    eai_tensor_create(&in, EAI_DTYPE_F32, s4, 1);
+    eai_tensor_create(&out, EAI_DTYPE_F32, s4, 1);
+    eai_tensor_t tensors[] = {in, out};
+    /* 2^32 + 1000, which truncates to 1000 in an int. */
+    tensors[0].shape[0] = 4294968296LL;
+    tensors[1].shape[0] = 4294968296LL;
+
+    eai_status_t st = dispatch_unary(EAI_OP_RELU, tensors, 2, 0, 1);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for an element count past INT_MAX"); goto cleanup; }
+    PASS();
+cleanup:
+    tensors[0].shape[0] = 4;
+    tensors[1].shape[0] = 4;
+    eai_tensor_destroy(&tensors[0]);
+    eai_tensor_destroy(&tensors[1]);
+}
+
+/* A RELU whose input is a view claiming more elements than its source holds.
+ * The view is now refused at creation; the dispatch is checked too, so this
+ * stays a regression test for the backend if views ever change again. */
+static void test_cpu_refuses_oversized_view(void)
+{
+    TEST(cpu_refuses_oversized_view);
+    ensure_cpu_registered();
+
+    int64_t s4[] = {4}, s8[] = {8};
+    eai_tensor_t src, view, out;
+    eai_tensor_create(&src, EAI_DTYPE_F32, s4, 1);
+    eai_tensor_create(&out, EAI_DTYPE_F32, s8, 1);
+
+    eai_status_t vst = eai_tensor_create_view(&view, &src, NULL, s8, 1);
+    if (vst == EAI_OK) {
+        /* If a view may still outgrow its source, the backend must refuse it. */
+        eai_tensor_t tensors[] = {view, out};
+        eai_status_t st = dispatch_unary(EAI_OP_RELU, tensors, 2, 0, 1);
+        if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for a view larger than its source"); goto cleanup; }
+    }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&src);
+    eai_tensor_destroy(&out);
+}
+
+/* MATMUL accumulates into c while still reading a and b. With c aliasing a,
+ * the backend returned EAI_OK and the wrong numbers: 19 130 43 290 where
+ * 19 22 43 50 was correct. */
+static void test_cpu_refuses_matmul_output_aliasing_input(void)
+{
+    TEST(cpu_refuses_matmul_output_aliasing_input);
+    ensure_cpu_registered();
+
+    int64_t s22[] = {2, 2};
+    eai_tensor_t a, b;
+    eai_tensor_create(&a, EAI_DTYPE_F32, s22, 2);
+    eai_tensor_create(&b, EAI_DTYPE_F32, s22, 2);
+    const float av[] = {1, 2, 3, 4}, bv[] = {5, 6, 7, 8};
+    memcpy(a.data, av, sizeof(av));
+    memcpy(b.data, bv, sizeof(bv));
+    eai_tensor_t tensors[] = {a, b};
+
+    eai_status_t st = dispatch_binary(EAI_OP_MATMUL, tensors, 2, 0, 1, 0);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID when the output aliases an input"); goto cleanup; }
+
+    /* Refused means untouched. */
+    for (int i = 0; i < 4; i++) {
+        if (((float *)tensors[0].data)[i] != av[i]) { FAIL("input was overwritten"); goto cleanup; }
+    }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&tensors[0]);
+    eai_tensor_destroy(&tensors[1]);
+}
+
+/* The checks must not cost well-formed graphs anything: a matmul whose
+ * output happens to be a separate buffer of the right shape still runs. */
+static void test_cpu_still_runs_well_formed_graphs(void)
+{
+    TEST(cpu_still_runs_well_formed_graphs);
+    ensure_cpu_registered();
+
+    int64_t s22[] = {2, 2};
+    eai_tensor_t a, b, c;
+    eai_tensor_create(&a, EAI_DTYPE_F32, s22, 2);
+    eai_tensor_create(&b, EAI_DTYPE_F32, s22, 2);
+    eai_tensor_create(&c, EAI_DTYPE_F32, s22, 2);
+    const float av[] = {1, 2, 3, 4}, bv[] = {5, 6, 7, 8};
+    memcpy(a.data, av, sizeof(av));
+    memcpy(b.data, bv, sizeof(bv));
+    eai_tensor_t tensors[] = {a, b, c};
+
+    eai_status_t st = dispatch_binary(EAI_OP_MATMUL, tensors, 3, 0, 1, 2);
+    if (st != EAI_OK) { FAIL("a well-formed matmul was refused"); goto cleanup; }
+
+    const float want[] = {19, 22, 43, 50};
+    for (int i = 0; i < 4; i++) {
+        if (fabsf(((float *)tensors[2].data)[i] - want[i]) > 1e-5f) {
+            FAIL("well-formed matmul gave the wrong answer"); goto cleanup;
+        }
+    }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&tensors[0]);
+    eai_tensor_destroy(&tensors[1]);
+    eai_tensor_destroy(&tensors[2]);
+}
+
 int main(void)
 {
     printf("=== EAI Accel Backend Tests (Comprehensive) ===\n\n");
@@ -717,6 +1090,17 @@ int main(void)
     test_cpu_refuses_tensor_index_out_of_range();
     test_cpu_refuses_tensor_without_data();
     test_cpu_runs_no_op_of_a_graph_it_refuses();
+    test_cpu_refuses_elementwise_shape_mismatch();
+    test_cpu_elementwise_mismatch_leaves_canary_intact();
+    test_cpu_refuses_unary_shape_mismatch();
+    test_cpu_refuses_matmul_inner_dimension_mismatch();
+    test_cpu_refuses_matmul_output_shape_mismatch();
+    test_cpu_refuses_zero_element_tensor();
+    test_cpu_refuses_negative_dimension();
+    test_cpu_refuses_element_count_that_overflows_int();
+    test_cpu_refuses_oversized_view();
+    test_cpu_refuses_matmul_output_aliasing_input();
+    test_cpu_still_runs_well_formed_graphs();
     test_graph_destroy_null();
     test_graph_destroy_empty();
 

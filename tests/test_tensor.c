@@ -236,6 +236,84 @@ cleanup:
     eai_tensor_destroy(&src);
 }
 
+/* A view used to report data_size = 0, which told every bounds check
+ * downstream that the buffer behind it was empty. It now reports its own
+ * extent: base pointer to last addressable element. */
+static void test_tensor_view_reports_its_extent(void)
+{
+    TEST(tensor_view_reports_its_extent);
+    int64_t shape[] = {4, 4};
+    eai_tensor_t src, view;
+    eai_tensor_create(&src, EAI_DTYPE_F32, shape, 2);
+
+    /* A contiguous 4x4 view of itself spans all 16 floats. */
+    int64_t full[] = {4, 4};
+    if (eai_tensor_create_view(&view, &src, NULL, full, 2) != EAI_OK) {
+        FAIL("full view rejected"); eai_tensor_destroy(&src); return;
+    }
+    if (view.data_size != 16 * sizeof(float)) { FAIL("full view data_size != 64"); goto cleanup; }
+    if (view.owns_data) { FAIL("view must not own data"); goto cleanup; }
+
+    /* A 2x2 view keeps the source's stride of 4, so it reaches from its
+     * first element to element 5: six floats, not four. */
+    int64_t vs[] = {2, 2};
+    eai_tensor_t sub;
+    if (eai_tensor_create_view(&sub, &src, NULL, vs, 2) != EAI_OK) {
+        FAIL("2x2 view rejected"); goto cleanup;
+    }
+    if (sub.data_size != 6 * sizeof(float)) { FAIL("2x2 view data_size != 24"); goto cleanup; }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&src);
+}
+
+/* A view was free to name a shape larger than its source. A [8] view over a
+ * [4] tensor handed consumers a tensor whose shape promised twice the memory
+ * that exists, and the CPU backend duly read all of it. */
+static void test_tensor_view_refuses_shape_larger_than_source(void)
+{
+    TEST(tensor_view_refuses_shape_larger_than_source);
+    int64_t s4[] = {4};
+    eai_tensor_t src, view;
+    eai_tensor_create(&src, EAI_DTYPE_F32, s4, 1);
+
+    int64_t s8[] = {8};
+    if (eai_tensor_create_view(&view, &src, NULL, s8, 1) != EAI_ERR_INVALID) {
+        FAIL("a [8] view over a [4] source was accepted"); goto cleanup;
+    }
+
+    /* Offset past the end, and offset + shape past the end. */
+    int64_t off_far[] = {4};
+    int64_t s1[] = {1};
+    if (eai_tensor_create_view(&view, &src, off_far, s1, 1) != EAI_ERR_INVALID) {
+        FAIL("a view starting at the end was accepted"); goto cleanup;
+    }
+    int64_t off3[] = {3};
+    int64_t s2[] = {2};
+    if (eai_tensor_create_view(&view, &src, off3, s2, 1) != EAI_ERR_INVALID) {
+        FAIL("a view running past the end was accepted"); goto cleanup;
+    }
+
+    /* A negative offset, and more dimensions than the source has. */
+    int64_t neg[] = {-1};
+    if (eai_tensor_create_view(&view, &src, neg, s1, 1) != EAI_ERR_INVALID) {
+        FAIL("a negative offset was accepted"); goto cleanup;
+    }
+    int64_t s2d[] = {2, 2};
+    if (eai_tensor_create_view(&view, &src, NULL, s2d, 2) != EAI_ERR_INVALID) {
+        FAIL("a 2-D view of a 1-D source was accepted"); goto cleanup;
+    }
+
+    /* A view that does fit is still accepted. */
+    int64_t off1[] = {1};
+    if (eai_tensor_create_view(&view, &src, off1, s2, 1) != EAI_OK) {
+        FAIL("a view that fits was refused"); goto cleanup;
+    }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&src);
+}
+
 /* ---- eai_dtype_size completeness ---- */
 
 static void test_dtype_size_all(void)
@@ -326,6 +404,8 @@ int main(void)
     test_tensor_view_null_params();
     test_tensor_view_shares_data();
     test_tensor_view_with_offset();
+    test_tensor_view_reports_its_extent();
+    test_tensor_view_refuses_shape_larger_than_source();
     test_dtype_size_all();
     test_tensor_numel_null();
     test_tensor_numel_zero_ndim();
