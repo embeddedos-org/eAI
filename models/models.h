@@ -33,8 +33,8 @@ typedef enum {
 } eai_model_runtime_t;
 
 typedef enum {
-    EAI_MODEL_TIER_MICRO  = 0,   /* < 100MB, MCU-class (Cortex-M7, RP2040) */
-    EAI_MODEL_TIER_TINY   = 1,   /* 100-500MB, low-end SBC (RPi3, nRF5340) */
+    EAI_MODEL_TIER_MICRO  = 0,   /* < 100MB, smallest models (low-end SBC) */
+    EAI_MODEL_TIER_TINY   = 1,   /* 100-500MB, low-end SBC (RPi3, BeagleBone AI) */
     EAI_MODEL_TIER_SMALL  = 2,   /* 500MB-2GB, mid SBC (RPi4, i.MX8M) */
     EAI_MODEL_TIER_MEDIUM = 3,   /* 2-4GB, high SBC (Jetson Nano, RPi5) */
     EAI_MODEL_TIER_LARGE  = 4    /* 4GB+, edge server (x86, Jetson Orin) */
@@ -52,7 +52,7 @@ typedef struct {
     uint32_t        ram_mb;           /* RAM required */
     uint32_t        storage_mb;       /* disk/flash storage */
     uint32_t        tokens_per_sec;   /* approx on target hardware */
-    const char     *target_hardware;  /* recommended hardware */
+    const char     *target_hardware;  /* recommended hardware (RAM >= ram_mb; see capacity note above EAI_MODELS in models.c) */
     const char     *license;
     const char     *gguf_file;        /* filename for llama.cpp */
 
