@@ -488,6 +488,203 @@ static void test_graph_destroy_empty(void)
     PASS();
 }
 
+/* ---- What the CPU backend does not implement, it refuses ---- */
+
+static void test_cpu_can_handle_only_implemented_ops(void)
+{
+    TEST(cpu_can_handle_only_implemented_ops);
+    eai_accel_backend_t backend;
+    memset(&backend, 0, sizeof(backend));
+    eai_op_t conv = { .type = EAI_OP_CONV2D };
+    if (eai_accel_cpu_ops.can_handle(&backend, &conv)) {
+        FAIL("CPU backend has no CONV2D kernel"); return;
+    }
+    PASS();
+}
+
+/* An op with no kernel used to be logged and skipped, and the graph reported
+ * EAI_OK with its output never written. */
+static void test_cpu_refuses_unimplemented_op(void)
+{
+    TEST(cpu_refuses_unimplemented_op);
+    ensure_cpu_registered();
+
+    int64_t shape[] = {4};
+    eai_tensor_t in, out;
+    eai_tensor_create(&in, EAI_DTYPE_F32, shape, 1);
+    eai_tensor_create(&out, EAI_DTYPE_F32, shape, 1);
+    for (int i = 0; i < 4; i++) {
+        ((float *)in.data)[i] = 1.0f;
+        ((float *)out.data)[i] = -7.0f;
+    }
+
+    int in_idx[] = {0};
+    int out_idx[] = {1};
+    eai_op_t op = {
+        .type = EAI_OP_CONV2D, .input_count = 1, .output_count = 1,
+        .input_indices = in_idx, .output_indices = out_idx,
+    };
+    eai_tensor_t tensors[] = {in, out};
+    eai_compute_graph_t graph = { .ops = &op, .op_count = 1, .tensors = tensors, .tensor_count = 2 };
+
+    eai_status_t st = eai_accel_dispatch(&graph);
+    if (st != EAI_ERR_UNSUPPORTED) { FAIL("expected UNSUPPORTED for CONV2D"); goto cleanup; }
+    for (int i = 0; i < 4; i++) {
+        if (((float *)tensors[1].data)[i] != -7.0f) { FAIL("output was written"); goto cleanup; }
+    }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&tensors[0]);
+    eai_tensor_destroy(&tensors[1]);
+}
+
+/* Every kernel reads its tensors as float32. A 2x2 INT8 tensor holds 4
+ * bytes; the float kernel read and wrote 16, past the end of each buffer. */
+static void test_cpu_refuses_non_f32_tensor(void)
+{
+    TEST(cpu_refuses_non_f32_tensor);
+    ensure_cpu_registered();
+
+    int64_t shape[] = {2, 2};
+    eai_tensor_t a, b, c;
+    eai_tensor_create(&a, EAI_DTYPE_INT8, shape, 2);
+    eai_tensor_create(&b, EAI_DTYPE_INT8, shape, 2);
+    eai_tensor_create(&c, EAI_DTYPE_INT8, shape, 2);
+    memset(a.data, 1, 4);
+    memset(b.data, 1, 4);
+    memset(c.data, 0x5A, 4);
+
+    int in_idx[] = {0, 1};
+    int out_idx[] = {2};
+    eai_op_t op = {
+        .type = EAI_OP_MATMUL, .input_count = 2, .output_count = 1,
+        .input_indices = in_idx, .output_indices = out_idx,
+    };
+    eai_tensor_t tensors[] = {a, b, c};
+    eai_compute_graph_t graph = { .ops = &op, .op_count = 1, .tensors = tensors, .tensor_count = 3 };
+
+    eai_status_t st = eai_accel_dispatch(&graph);
+    if (st != EAI_ERR_UNSUPPORTED) { FAIL("expected UNSUPPORTED for INT8 tensors"); goto cleanup; }
+    for (int i = 0; i < 4; i++) {
+        if (((uint8_t *)tensors[2].data)[i] != 0x5A) { FAIL("output was written"); goto cleanup; }
+    }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&tensors[0]);
+    eai_tensor_destroy(&tensors[1]);
+    eai_tensor_destroy(&tensors[2]);
+}
+
+static void test_cpu_refuses_tensor_index_out_of_range(void)
+{
+    TEST(cpu_refuses_tensor_index_out_of_range);
+    ensure_cpu_registered();
+
+    int64_t shape[] = {4};
+    eai_tensor_t in, out;
+    eai_tensor_create(&in, EAI_DTYPE_F32, shape, 1);
+    eai_tensor_create(&out, EAI_DTYPE_F32, shape, 1);
+
+    int in_idx[] = {5};
+    int out_idx[] = {1};
+    eai_op_t op = {
+        .type = EAI_OP_RELU, .input_count = 1, .output_count = 1,
+        .input_indices = in_idx, .output_indices = out_idx,
+    };
+    /* On the heap, so that reading tensors[5] or tensors[-1] is an error a
+     * sanitizer build reports rather than a read of whatever is on the stack. */
+    eai_tensor_t *tensors = malloc(2 * sizeof(*tensors));
+    if (!tensors) { FAIL("malloc"); return; }
+    tensors[0] = in;
+    tensors[1] = out;
+    eai_compute_graph_t graph = { .ops = &op, .op_count = 1, .tensors = tensors, .tensor_count = 2 };
+
+    eai_status_t st = eai_accel_dispatch(&graph);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for tensor index 5 of 2"); goto cleanup; }
+
+    in_idx[0] = -1;
+    st = eai_accel_dispatch(&graph);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for tensor index -1"); goto cleanup; }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&tensors[0]);
+    eai_tensor_destroy(&tensors[1]);
+    free(tensors);
+}
+
+/* A tensor that was never given a buffer (or was destroyed) is refused, not
+ * dereferenced. */
+static void test_cpu_refuses_tensor_without_data(void)
+{
+    TEST(cpu_refuses_tensor_without_data);
+    ensure_cpu_registered();
+
+    int64_t shape[] = {4};
+    eai_tensor_t in, out;
+    eai_tensor_create(&in, EAI_DTYPE_F32, shape, 1);
+    memset(&out, 0, sizeof(out));
+    out.dtype = EAI_DTYPE_F32;
+    out.ndim = 1;
+    out.shape[0] = 4;
+
+    int in_idx[] = {0};
+    int out_idx[] = {1};
+    eai_op_t op = {
+        .type = EAI_OP_RELU, .input_count = 1, .output_count = 1,
+        .input_indices = in_idx, .output_indices = out_idx,
+    };
+    eai_tensor_t tensors[] = {in, out};
+    eai_compute_graph_t graph = { .ops = &op, .op_count = 1, .tensors = tensors, .tensor_count = 2 };
+
+    eai_status_t st = eai_accel_dispatch(&graph);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for a tensor with no data"); goto cleanup; }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&tensors[0]);
+}
+
+/* The graph is checked as a whole before any kernel runs: a graph whose
+ * second op cannot be executed does not leave its first op's output behind. */
+static void test_cpu_runs_no_op_of_a_graph_it_refuses(void)
+{
+    TEST(cpu_runs_no_op_of_a_graph_it_refuses);
+    ensure_cpu_registered();
+
+    int64_t shape[] = {4};
+    eai_tensor_t in, mid, out;
+    eai_tensor_create(&in, EAI_DTYPE_F32, shape, 1);
+    eai_tensor_create(&mid, EAI_DTYPE_F32, shape, 1);
+    eai_tensor_create(&out, EAI_DTYPE_F32, shape, 1);
+    for (int i = 0; i < 4; i++) {
+        ((float *)in.data)[i] = 2.0f;
+        ((float *)mid.data)[i] = -7.0f;
+    }
+
+    int relu_in[] = {0};
+    int relu_out[] = {1};
+    int conv_in[] = {1};
+    int conv_out[] = {2};
+    eai_op_t ops[] = {
+        { .type = EAI_OP_RELU, .input_count = 1, .output_count = 1,
+          .input_indices = relu_in, .output_indices = relu_out },
+        { .type = EAI_OP_CONV2D, .input_count = 1, .output_count = 1,
+          .input_indices = conv_in, .output_indices = conv_out },
+    };
+    eai_tensor_t tensors[] = {in, mid, out};
+    eai_compute_graph_t graph = { .ops = ops, .op_count = 2, .tensors = tensors, .tensor_count = 3 };
+
+    eai_status_t st = eai_accel_dispatch(&graph);
+    if (st != EAI_ERR_UNSUPPORTED) { FAIL("expected UNSUPPORTED"); goto cleanup; }
+    for (int i = 0; i < 4; i++) {
+        if (((float *)tensors[1].data)[i] != -7.0f) { FAIL("RELU ran before the refusal"); goto cleanup; }
+    }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&tensors[0]);
+    eai_tensor_destroy(&tensors[1]);
+    eai_tensor_destroy(&tensors[2]);
+}
+
 int main(void)
 {
     printf("=== EAI Accel Backend Tests (Comprehensive) ===\n\n");
@@ -514,6 +711,12 @@ int main(void)
     test_cpu_layernorm();
     test_cpu_softmax_large_values();
     test_cpu_matmul_identity();
+    test_cpu_can_handle_only_implemented_ops();
+    test_cpu_refuses_unimplemented_op();
+    test_cpu_refuses_non_f32_tensor();
+    test_cpu_refuses_tensor_index_out_of_range();
+    test_cpu_refuses_tensor_without_data();
+    test_cpu_runs_no_op_of_a_graph_it_refuses();
     test_graph_destroy_null();
     test_graph_destroy_empty();
 
