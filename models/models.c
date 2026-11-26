@@ -7,9 +7,17 @@
 #include <string.h>
 #include <stdio.h>
 
+/* Model registry — curated embedded LLMs.
+ *
+ * Capacity rule: a row's target_hardware names only hardware whose RAM
+ * can hold the row's ram_mb. Microcontroller-class parts are never listed
+ * for a model above on-chip RAM: e.g. the nRF5340 (512 KB RAM, per the
+ * Nordic product page quoted in issue #87) cannot run any row here, whose
+ * smallest ram_mb is 80 MB. A target annotated with a RAM size in this
+ * file (e.g. "RPi4 (4GB)") is the verified floor for its row. */
 const eai_model_info_t EAI_MODELS[] = {
     /* ============================================================ */
-    /* MICRO TIER — < 100MB, runs on MCUs (Cortex-M7, ESP32-S3)    */
+    /* MICRO TIER — < 100MB, smallest models (low-end SBC)         */
     /* ============================================================ */
     {
         .name = "tinyllama-1.1b-q2k",
@@ -20,7 +28,7 @@ const eai_model_info_t EAI_MODELS[] = {
         .param_count_m = 1100, .context_len = 512,
         .ram_mb = 80, .storage_mb = 60,
         .tokens_per_sec = 2,
-        .target_hardware = "STM32H7, ESP32-S3, RPi Pico W",
+        .target_hardware = "RPi4 (4GB)",
         .license = "Apache-2.0",
         .gguf_file = "tinyllama-1.1b.Q2_K.gguf",
         .train_ram_mb = 240, .lora_supported = true, .lora_adapter_mb = 10
@@ -38,7 +46,7 @@ const eai_model_info_t EAI_MODELS[] = {
         .param_count_m = 1300, .context_len = 2048,
         .ram_mb = 200, .storage_mb = 150,
         .tokens_per_sec = 5,
-        .target_hardware = "RPi3, BeagleBone AI, nRF5340",
+        .target_hardware = "RPi3, BeagleBone AI",
         .license = "MIT",
         .gguf_file = "phi-1_5.Q4_0.gguf",
         .train_ram_mb = 600, .lora_supported = true, .lora_adapter_mb = 15
@@ -52,7 +60,7 @@ const eai_model_info_t EAI_MODELS[] = {
         .param_count_m = 500, .context_len = 4096,
         .ram_mb = 120, .storage_mb = 90,
         .tokens_per_sec = 10,
-        .target_hardware = "RPi3, ESP32-P4, AM64x",
+        .target_hardware = "RPi3, AM64x",
         .license = "Apache-2.0",
         .gguf_file = "qwen2-0_5b.Q4_0.gguf",
         .train_ram_mb = 360, .lora_supported = true, .lora_adapter_mb = 8
@@ -66,7 +74,7 @@ const eai_model_info_t EAI_MODELS[] = {
         .param_count_m = 360, .context_len = 2048,
         .ram_mb = 100, .storage_mb = 75,
         .tokens_per_sec = 15,
-        .target_hardware = "RPi3, nRF5340, AM64x",
+        .target_hardware = "RPi3, AM64x",
         .license = "Apache-2.0",
         .gguf_file = "smollm-360m.Q5_1.gguf",
         .train_ram_mb = 300, .lora_supported = true, .lora_adapter_mb = 5

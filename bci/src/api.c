@@ -15,19 +15,63 @@ struct eai_bci_handle_s {
     bool               has_output;
 };
 
+/* A NULL or empty name selects the default backend. An unrecognised name
+ * makes eai_bci_create fail instead of quietly substituting a default:
+ * handing back the simulator for a device the caller asked for produces
+ * fabricated signal data that looks real. A backend that was not compiled in
+ * is unrecognised here by design -- the caller did not get what it asked for. */
+static const eai_bci_device_ops_t *eai_bci_select_device(const char *name)
+{
+    if (!name || !*name || strcmp(name, "simulator") == 0)
+        return &eai_bci_device_simulator_ops;
+#ifdef EAI_BCI_OPENBCI_ENABLED
+    if (strcmp(name, "openbci") == 0) return &eai_bci_device_openbci_ops;
+#endif
+    /* "emotiv" and "muse" are deliberately absent even when their build flags
+     * are on. Both adapters are acquisition stubs: emotiv_read and muse_read
+     * memset the caller's buffer to zero and return EAI_OK with a non-zero
+     * samples_read, so selecting either would hand back fabricated samples
+     * reported as a successful hardware read -- the exact failure this
+     * function exists to end. They become selectable when they acquire. */
+    return NULL;
+}
+
+static const eai_bci_decoder_ops_t *eai_bci_select_decoder(const char *name)
+{
+    if (!name || !*name || strcmp(name, "threshold") == 0)
+        return &eai_bci_decoder_threshold_ops;
+    if (strcmp(name, "snn") == 0) return &eai_bci_decoder_snn_ops;
+    /* No "tinyml": EAI_BCI_TINYML defines EAI_BCI_TINYML_ENABLED and
+     * decoder.h then declares eai_bci_decoder_tinyml_ops, but no source in
+     * the tree defines it. Referencing it here under that flag broke the link
+     * for every caller, including ones that only ever ask for the simulator.
+     * The name resolves to NULL until a decoder is actually compiled in. */
+    return NULL;
+}
+
+static const eai_bci_output_ops_t *eai_bci_select_output(const char *name)
+{
+    if (!name || !*name || strcmp(name, "log") == 0)
+        return &eai_bci_output_log_ops;
+    if (strcmp(name, "gpio") == 0) return &eai_bci_output_gpio_ops;
+    return NULL;
+}
+
 EAI_BCI_EXPORT eai_bci_handle_t *eai_bci_create(const char *device_name,
                                                    const char *decoder_name,
                                                    const char *output_name)
 {
+    /* Resolve the names before allocating, so an unknown name costs nothing. */
+    const eai_bci_device_ops_t *dev_ops = eai_bci_select_device(device_name);
+    const eai_bci_decoder_ops_t *dec_ops = eai_bci_select_decoder(decoder_name);
+    const eai_bci_output_ops_t *out_ops =
+        (output_name != NULL) ? eai_bci_select_output(output_name) : NULL;
+
+    if (!dev_ops || !dec_ops) return NULL;
+    if (output_name != NULL && !out_ops) return NULL;
+
     eai_bci_handle_t *h = (eai_bci_handle_t *)calloc(1, sizeof(eai_bci_handle_t));
     if (!h) return NULL;
-
-    const eai_bci_device_ops_t *dev_ops = &eai_bci_device_simulator_ops;
-    const eai_bci_decoder_ops_t *dec_ops = &eai_bci_decoder_threshold_ops;
-    const eai_bci_output_ops_t *out_ops = &eai_bci_output_log_ops;
-
-    (void)device_name;
-    (void)decoder_name;
 
     if (eai_bci_device_init(&h->device, dev_ops, NULL, 0) != EAI_OK) goto fail;
     if (eai_bci_decoder_init(&h->decoder, dec_ops, NULL, 0) != EAI_OK) goto fail;

@@ -6,6 +6,9 @@
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
+#include <limits.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 #define LOG_MOD "accel-cpu"
 
@@ -16,11 +19,28 @@ static eai_status_t cpu_init(eai_accel_backend_t *backend, const eai_kv_t *confi
     return EAI_OK;
 }
 
+/* Number of input tensors the kernel for `type` reads, or 0 when this backend
+ * has no kernel for it. Every kernel below writes one output. */
+static int cpu_kernel_inputs(eai_op_type_t type)
+{
+    switch (type) {
+        case EAI_OP_MATMUL:
+        case EAI_OP_ADD:
+        case EAI_OP_MUL:
+            return 2;
+        case EAI_OP_RELU:
+        case EAI_OP_SOFTMAX:
+        case EAI_OP_LAYERNORM:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
 static bool cpu_can_handle(eai_accel_backend_t *backend, const eai_op_t *op)
 {
     (void)backend;
-    /* CPU can handle all operations */
-    return (op != NULL);
+    return (op != NULL) && cpu_kernel_inputs(op->type) > 0;
 }
 
 static eai_status_t cpu_prepare(eai_accel_backend_t *backend, const eai_compute_graph_t *graph)
@@ -92,10 +112,172 @@ static void cpu_layernorm_f32(const float *in, float *out, int n,
     }
 }
 
+/* A tensor a kernel may touch: inside the graph, backed by data, float32.
+ * The kernels cast `data` to float *, so any other dtype would be read and
+ * written past the end of a buffer that eai_tensor_create() sized by dtype. */
+static eai_status_t cpu_check_tensor(const eai_compute_graph_t *graph, int index)
+{
+    if (!graph->tensors || index < 0 || index >= graph->tensor_count)
+        return EAI_ERR_INVALID;
+    if (!graph->tensors[index].data)
+        return EAI_ERR_INVALID;
+    if (graph->tensors[index].dtype != EAI_DTYPE_F32)
+        return EAI_ERR_UNSUPPORTED;
+    return EAI_OK;
+}
+
+/* The element count a float32 kernel may walk, or an error when the shape
+ * cannot be trusted to produce one.
+ *
+ * Every kernel below takes an `int` count and treats `data` as a flat float
+ * array with no bound of its own, so each of these is a guard on an indexing
+ * step that has nothing else stopping it:
+ *
+ *   - a non-positive dimension gives a count of zero or less; cpu_softmax_f32
+ *     reads in[0] before its loop, and a negative count makes every loop
+ *     bound meaningless.
+ *   - a count that does not fit an `int` is truncated by the (int) cast at
+ *     the call site, so a 2^32+1000 element tensor walks 1000 elements of a
+ *     buffer that was never sized for either number.
+ *   - `data_size` is the only record of how large the buffer behind `data`
+ *     really is. A tensor whose shape claims more floats than its buffer
+ *     holds is refused rather than indexed.
+ */
+static eai_status_t cpu_tensor_elems(const eai_tensor_t *t, int *out)
+{
+    if (t->ndim <= 0 || t->ndim > EAI_TENSOR_MAX_DIMS)
+        return EAI_ERR_INVALID;
+
+    int64_t n = 1;
+    for (int i = 0; i < t->ndim; i++) {
+        int64_t d = t->shape[i];
+        if (d <= 0 || d > INT_MAX) return EAI_ERR_INVALID;
+        if (n > INT_MAX / d) return EAI_ERR_INVALID;  /* no signed overflow */
+        n *= d;
+    }
+
+    if (t->data_size / sizeof(float) < (size_t)n)
+        return EAI_ERR_INVALID;
+
+    *out = (int)n;
+    return EAI_OK;
+}
+
+/* Shape agreement between the operands of one op.
+ *
+ * cpu_execute() takes dimensions and element counts from one operand and
+ * applies them to the others without comparing them. Everything a kernel
+ * assumes about its operands is checked here, before it can index anything. */
+/* Do the two tensors' addressable bytes intersect? data_size is each tensor's
+ * own extent, which for a view is the span from its base to its last
+ * addressable element. */
+static bool cpu_ranges_overlap(const eai_tensor_t *x, const eai_tensor_t *y)
+{
+    const uint8_t *xb = (const uint8_t *)x->data;
+    const uint8_t *yb = (const uint8_t *)y->data;
+
+    if (!xb || !yb) return false;
+    if (x->data_size == 0 || y->data_size == 0) return xb == yb;
+    return xb < yb + y->data_size && yb < xb + x->data_size;
+}
+
+static eai_status_t cpu_check_op_shapes(const eai_compute_graph_t *graph,
+                                        const eai_op_t *op)
+{
+    const eai_tensor_t *in0 = &graph->tensors[op->input_indices[0]];
+    const eai_tensor_t *out = &graph->tensors[op->output_indices[0]];
+    int n_in0 = 0, n_out = 0, n_b = 0;
+    eai_status_t st;
+
+    if ((st = cpu_tensor_elems(in0, &n_in0)) != EAI_OK) return st;
+    if ((st = cpu_tensor_elems(out, &n_out)) != EAI_OK) return st;
+
+    switch (op->type) {
+        case EAI_OP_MATMUL: {
+            const eai_tensor_t *b = &graph->tensors[op->input_indices[1]];
+            if ((st = cpu_tensor_elems(b, &n_b)) != EAI_OK) return st;
+
+            /* cpu_matmul_f32 reads M and K from a and N from b, then indexes
+             * a[i*K+k], b[k*N+j] and c[i*N+j]. Nothing else relates the three
+             * shapes, so K must be shared and the output must be exactly the
+             * [M, N] the kernel is about to write. */
+            if (in0->ndim != 2 || b->ndim != 2 || out->ndim != 2)
+                return EAI_ERR_INVALID;
+            if (in0->shape[1] != b->shape[0])
+                return EAI_ERR_INVALID;
+            if (out->shape[0] != in0->shape[0] || out->shape[1] != b->shape[1])
+                return EAI_ERR_INVALID;
+
+            /* The kernel writes c[i*N+j] while still reading a and b, so an
+             * output that shares storage with an input silently returns a
+             * wrong answer. Compare the byte ranges rather than the base
+             * pointers: two views of one source can overlap while starting at
+             * different addresses, and equal pointers are only the special
+             * case where the overlap begins at offset zero. Disjoint views of
+             * the same source stay legal. */
+            if (cpu_ranges_overlap(out, in0) || cpu_ranges_overlap(out, b))
+                return EAI_ERR_INVALID;
+            return EAI_OK;
+        }
+        case EAI_OP_ADD:
+        case EAI_OP_MUL: {
+            const eai_tensor_t *b = &graph->tensors[op->input_indices[1]];
+            if ((st = cpu_tensor_elems(b, &n_b)) != EAI_OK) return st;
+            /* The loop runs numel(a) times and indexes all three buffers. */
+            if (n_b != n_in0 || n_out != n_in0) return EAI_ERR_INVALID;
+            return EAI_OK;
+        }
+        case EAI_OP_RELU:
+        case EAI_OP_SOFTMAX:
+        case EAI_OP_LAYERNORM:
+            /* numel(in) drives both the reads of `in` and the writes of
+             * `out`; these kernels are safe to run in place. */
+            if (n_out != n_in0) return EAI_ERR_INVALID;
+            return EAI_OK;
+        default:
+            /* Not reachable: cpu_kernel_inputs() already refused it. */
+            return EAI_ERR_UNSUPPORTED;
+    }
+}
+
+/* Check the whole graph before any kernel runs, so a graph that is refused
+ * has had none of its tensors written. */
+static eai_status_t cpu_check_graph(const eai_compute_graph_t *graph)
+{
+    for (int i = 0; i < graph->op_count; i++) {
+        const eai_op_t *op = &graph->ops[i];
+        int inputs = cpu_kernel_inputs(op->type);
+
+        if (inputs == 0) {
+            EAI_LOG_WARN(LOG_MOD, "no CPU kernel for op type: %d", op->type);
+            return EAI_ERR_UNSUPPORTED;
+        }
+        if (op->input_count < inputs || op->output_count < 1 ||
+            !op->input_indices || !op->output_indices)
+            return EAI_ERR_INVALID;
+
+        for (int j = 0; j < inputs; j++) {
+            eai_status_t st = cpu_check_tensor(graph, op->input_indices[j]);
+            if (st != EAI_OK) return st;
+        }
+        eai_status_t st = cpu_check_tensor(graph, op->output_indices[0]);
+        if (st != EAI_OK) return st;
+
+        /* Only now that every index is known to be in range and every tensor
+         * known to be float32 with a buffer can the shapes be compared. */
+        st = cpu_check_op_shapes(graph, op);
+        if (st != EAI_OK) return st;
+    }
+    return EAI_OK;
+}
+
 static eai_status_t cpu_execute(eai_accel_backend_t *backend, const eai_compute_graph_t *graph)
 {
     if (!graph || !graph->ops) return EAI_ERR_INVALID;
     (void)backend;
+
+    eai_status_t check = cpu_check_graph(graph);
+    if (check != EAI_OK) return check;
 
     for (int i = 0; i < graph->op_count; i++) {
         const eai_op_t *op = &graph->ops[i];
@@ -153,8 +335,8 @@ static eai_status_t cpu_execute(eai_accel_backend_t *backend, const eai_compute_
                 break;
             }
             default:
-                EAI_LOG_WARN(LOG_MOD, "unhandled op type: %d", op->type);
-                break;
+                /* Not reachable: cpu_check_graph() refused the graph. */
+                return EAI_ERR_UNSUPPORTED;
         }
     }
 

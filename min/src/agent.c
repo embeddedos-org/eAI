@@ -77,7 +77,9 @@ static void append_preferences_to_prompt(const eai_min_agent_t *agent, char *pro
     }
 }
 
-static eai_status_t agent_think(eai_min_agent_t *agent, const char *goal)
+/* tool_result: what the tool called in the previous step returned, or NULL */
+static eai_status_t agent_think(eai_min_agent_t *agent, const char *goal,
+                                const char *tool_result)
 {
     char prompt[EAI_AGENT_PROMPT_MAX];
     snprintf(prompt, sizeof(prompt),
@@ -91,6 +93,12 @@ static eai_status_t agent_think(eai_min_agent_t *agent, const char *goal)
             snprintf(prompt + plen, sizeof(prompt) - plen,
                      "%s%s", i > 0 ? ", " : "", agent->tools->tools[i].name);
         }
+    }
+
+    /* the result of the tool the model asked for */
+    if (tool_result && tool_result[0] != '\0') {
+        size_t plen = strlen(prompt);
+        snprintf(prompt + plen, sizeof(prompt) - plen, "\n%s", tool_result);
     }
 
     /* check memory for context */
@@ -210,7 +218,7 @@ static eai_status_t agent_handle_tool_call(eai_min_agent_t *agent)
     eai_tool_result_t result;
     eai_status_t s = eai_tool_exec(tool, args, arg_count, &result);
 
-    if (s == EAI_OK && result.len > 0) {
+    if (s == EAI_OK) {
         snprintf(agent->last_output, sizeof(agent->last_output),
                  "Tool %s returned: %.*s", tool_name, (int)result.len, result.data);
     }
@@ -226,6 +234,7 @@ eai_status_t eai_min_agent_run(eai_min_agent_t *agent, const eai_agent_task_t *t
     int max_iter = task->max_iterations > 0 ? task->max_iterations : EAI_AGENT_MAX_ITERATIONS;
     agent->state = EAI_AGENT_THINKING;
     agent->iteration = 0;
+    bool have_tool_result = false;
 
     EAI_LOG_INFO(LOG_MOD, "agent starting: goal='%s'", task->goal);
 
@@ -233,7 +242,10 @@ eai_status_t eai_min_agent_run(eai_min_agent_t *agent, const eai_agent_task_t *t
         agent->iteration++;
 
         if (agent->state == EAI_AGENT_THINKING) {
-            eai_status_t s = agent_think(agent, task->goal);
+            /* last_output holds "Tool <name> returned: ..." after a tool call */
+            eai_status_t s = agent_think(agent, task->goal,
+                                         have_tool_result ? agent->last_output : NULL);
+            have_tool_result = false;
             if (s != EAI_OK) return s;
         }
 
@@ -241,6 +253,8 @@ eai_status_t eai_min_agent_run(eai_min_agent_t *agent, const eai_agent_task_t *t
             eai_status_t s = agent_handle_tool_call(agent);
             if (s != EAI_OK) {
                 EAI_LOG_WARN(LOG_MOD, "tool call failed, continuing");
+            } else {
+                have_tool_result = true;
             }
             continue;
         }
@@ -274,7 +288,7 @@ eai_status_t eai_min_agent_step(eai_min_agent_t *agent)
         return EAI_OK;
 
     agent->iteration++;
-    return agent_think(agent, "continue previous task");
+    return agent_think(agent, "continue previous task", NULL);
 }
 
 const char *eai_min_agent_output(const eai_min_agent_t *agent)
