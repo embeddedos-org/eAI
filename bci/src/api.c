@@ -27,12 +27,12 @@ static const eai_bci_device_ops_t *eai_bci_select_device(const char *name)
 #ifdef EAI_BCI_OPENBCI_ENABLED
     if (strcmp(name, "openbci") == 0) return &eai_bci_device_openbci_ops;
 #endif
-#ifdef EAI_BCI_EMOTIV_ENABLED
-    if (strcmp(name, "emotiv") == 0) return &eai_bci_device_emotiv_ops;
-#endif
-#ifdef EAI_BCI_MUSE_ENABLED
-    if (strcmp(name, "muse") == 0) return &eai_bci_device_muse_ops;
-#endif
+    /* "emotiv" and "muse" are deliberately absent even when their build flags
+     * are on. Both adapters are acquisition stubs: emotiv_read and muse_read
+     * memset the caller's buffer to zero and return EAI_OK with a non-zero
+     * samples_read, so selecting either would hand back fabricated samples
+     * reported as a successful hardware read -- the exact failure this
+     * function exists to end. They become selectable when they acquire. */
     return NULL;
 }
 
@@ -41,9 +41,11 @@ static const eai_bci_decoder_ops_t *eai_bci_select_decoder(const char *name)
     if (!name || !*name || strcmp(name, "threshold") == 0)
         return &eai_bci_decoder_threshold_ops;
     if (strcmp(name, "snn") == 0) return &eai_bci_decoder_snn_ops;
-#ifdef EAI_BCI_TINYML_ENABLED
-    if (strcmp(name, "tinyml") == 0) return &eai_bci_decoder_tinyml_ops;
-#endif
+    /* No "tinyml": EAI_BCI_TINYML defines EAI_BCI_TINYML_ENABLED and
+     * decoder.h then declares eai_bci_decoder_tinyml_ops, but no source in
+     * the tree defines it. Referencing it here under that flag broke the link
+     * for every caller, including ones that only ever ask for the simulator.
+     * The name resolves to NULL until a decoder is actually compiled in. */
     return NULL;
 }
 

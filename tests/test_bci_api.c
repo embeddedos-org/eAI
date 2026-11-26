@@ -97,6 +97,36 @@ static void test_optional_device_matches_its_build_flag(void)
     PASS();
 }
 
+// emotiv_read and muse_read memset the caller's buffer and return EAI_OK with
+// a non-zero samples_read. Serving those under a hardware name is the failure
+// this API change exists to end, so the names stay unavailable even when the
+// adapters are compiled in.
+static void test_acquisition_stubs_are_not_selectable(void)
+{
+    TEST(acquisition_stubs_are_not_selectable);
+    const char *stubs[] = { "emotiv", "muse" };
+    for (unsigned i = 0; i < sizeof(stubs) / sizeof(stubs[0]); i++) {
+        eai_bci_handle_t *h = eai_bci_create(stubs[i], "threshold", "log");
+        if (h) {
+            eai_bci_destroy(h);
+            FAIL("an acquisition stub must not be selectable by name");
+            return;
+        }
+    }
+    PASS();
+}
+
+// EAI_BCI_TINYML defines EAI_BCI_TINYML_ENABLED, but no source defines
+// eai_bci_decoder_tinyml_ops. The name must resolve to NULL rather than be
+// referenced, or the link fails for every caller under that flag.
+static void test_tinyml_decoder_is_unavailable(void)
+{
+    TEST(tinyml_decoder_is_unavailable);
+    eai_bci_handle_t *h = eai_bci_create("simulator", "tinyml", "log");
+    if (h) { eai_bci_destroy(h); FAIL("tinyml has no implementation to select"); return; }
+    PASS();
+}
+
 static void test_a_created_handle_still_runs(void)
 {
     TEST(a_created_handle_still_runs);
@@ -123,6 +153,8 @@ int main(void)
     test_unknown_output_is_refused();
     test_known_alternate_decoder_is_accepted();
     test_optional_device_matches_its_build_flag();
+    test_acquisition_stubs_are_not_selectable();
+    test_tinyml_decoder_is_unavailable();
     test_a_created_handle_still_runs();
 
     printf("\nResults: %d/%d passed, %d failed\n", tests_passed, tests_run, tests_failed);
