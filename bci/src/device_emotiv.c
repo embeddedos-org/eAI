@@ -4,6 +4,7 @@
 
 #include "eai_bci/device.h"
 #include "eai/log.h"
+#include <stdlib.h>   /* atoi */
 #include <string.h>
 
 #ifdef EAI_BCI_EMOTIV_ENABLED
