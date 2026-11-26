@@ -1143,6 +1143,92 @@ cleanup:
     eai_tensor_destroy(&tensors[2]);
 }
 
+/* A strided view passes the extent checks (its span covers its elements)
+ * but the kernels walk `data` as a flat array, so RELU over the first
+ * column of a [2,2] source would read {-5, 2} instead of {-5, 3} and
+ * answer {0, 2} instead of {0, 3} -- wrong, in-bounds, and silent.
+ * The backend refuses the view at op entry instead. A strided output
+ * is refused the same way: the kernel would write the wrong slots. */
+static void test_cpu_refuses_strided_view(void)
+{
+    TEST(cpu_refuses_strided_view);
+    ensure_cpu_registered();
+
+    int64_t s22[] = {2, 2}, s21[] = {2, 1};
+    int64_t off[] = {0, 0};
+    eai_tensor_t src, view, out, in;
+    eai_tensor_create(&src, EAI_DTYPE_F32, s22, 2);
+    eai_tensor_create(&out, EAI_DTYPE_F32, s21, 2);
+    eai_tensor_create(&in, EAI_DTYPE_F32, s21, 2);
+    const float sv[] = {-5.0f, 2.0f, 3.0f, -7.0f};
+    memcpy(src.data, sv, sizeof(sv));
+    const float iv[] = {-5.0f, 3.0f};
+    memcpy(in.data, iv, sizeof(iv));
+    float *fo = (float *)out.data;
+    fo[0] = 42.0f; fo[1] = 42.0f; /* canary: a refused op writes nothing */
+
+    if (eai_tensor_create_view(&view, &src, off, s21, 2) != EAI_OK) {
+        FAIL("a [2,1] view at [0,0] of a [2,2] source should be valid"); goto cleanup;
+    }
+    if (view.strides[0] == 1) {
+        FAIL("the view should be strided, not contiguous"); goto cleanup;
+    }
+
+    /* Strided input: refused. */
+    eai_tensor_t tensors[] = {view, out};
+    eai_status_t st = dispatch_unary(EAI_OP_RELU, tensors, 2, 0, 1);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for a strided view input"); goto cleanup; }
+    if (fo[0] != 42.0f || fo[1] != 42.0f) { FAIL("the output was written by a refused op"); goto cleanup; }
+
+    /* Strided output: refused too, with a contiguous input. */
+    eai_tensor_t tensors2[] = {in, view};
+    st = dispatch_unary(EAI_OP_RELU, tensors2, 2, 0, 1);
+    if (st != EAI_ERR_INVALID) { FAIL("expected INVALID for a strided view output"); goto cleanup; }
+    for (int i = 0; i < 4; i++) {
+        if (((float *)src.data)[i] != sv[i]) { FAIL("the source was overwritten"); goto cleanup; }
+    }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&src);
+    eai_tensor_destroy(&out);
+    eai_tensor_destroy(&in);
+}
+
+/* A view that IS contiguous must keep working, or the refusal would be a
+ * blanket ban on views. A [2,2] view at [0,0] of a [4,2] source has the
+ * strides a fresh [2,2] tensor would have, so RELU runs on it. */
+static void test_cpu_allows_contiguous_view(void)
+{
+    TEST(cpu_allows_contiguous_view);
+    ensure_cpu_registered();
+
+    int64_t s42[] = {4, 2}, s22[] = {2, 2};
+    int64_t off[] = {0, 0};
+    eai_tensor_t src, view, out;
+    eai_tensor_create(&src, EAI_DTYPE_F32, s42, 2);
+    eai_tensor_create(&out, EAI_DTYPE_F32, s22, 2);
+    const float sv[] = {-1.0f, 2.0f, 3.0f, -4.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    memcpy(src.data, sv, sizeof(sv));
+
+    if (eai_tensor_create_view(&view, &src, off, s22, 2) != EAI_OK) {
+        FAIL("a [2,2] view at [0,0] of a [4,2] source should be valid"); goto cleanup;
+    }
+
+    eai_tensor_t tensors[] = {view, out};
+    if (dispatch_unary(EAI_OP_RELU, tensors, 2, 0, 1) != EAI_OK) {
+        FAIL("a contiguous view was refused"); goto cleanup;
+    }
+
+    const float want[] = {0.0f, 2.0f, 3.0f, 0.0f};
+    for (int i = 0; i < 4; i++) {
+        if (((float *)tensors[1].data)[i] != want[i]) { FAIL("wrong RELU result over a contiguous view"); goto cleanup; }
+    }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&src);
+    eai_tensor_destroy(&out);
+}
+
 int main(void)
 {
     printf("=== EAI Accel Backend Tests (Comprehensive) ===\n\n");
@@ -1188,6 +1274,8 @@ int main(void)
     test_cpu_refuses_matmul_output_overlapping_input_view();
     test_cpu_allows_matmul_over_disjoint_views();
     test_cpu_still_runs_well_formed_graphs();
+    test_cpu_refuses_strided_view();
+    test_cpu_allows_contiguous_view();
     test_graph_destroy_null();
     test_graph_destroy_empty();
 
