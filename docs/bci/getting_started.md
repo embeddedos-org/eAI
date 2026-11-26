@@ -60,6 +60,30 @@ with BciPipeline(simulator=True) as bci:
         print(f"{intent['label']} ({intent['confidence']:.2f})")
 ```
 
+#### Selecting a device
+
+`device` defaults to `"simulator"`, so `BciPipeline()` with no arguments runs
+the simulator. Pass `device=` to use a real headset:
+
+```python
+with BciPipeline(device="openbci") as bci:
+    ...
+```
+
+The `simulator=` flag is an override, not the selector: `simulator=True` forces
+the simulator whatever `device` names, which is useful for running the same
+script against a headset or the simulator from one configuration switch.
+
+```python
+with BciPipeline(device="openbci", simulator=use_fake_data) as bci:
+    ...
+```
+
+Its default is `simulator=False`, so a named `device` takes effect without
+having to pass the flag as well. The device names are the ones the native
+library registers: `simulator`, and `openbci`, `emotiv` or `muse` when the
+library was built with the matching backend enabled.
+
 ## MCU Deployment
 
 For ARM Cortex-M4 targets:

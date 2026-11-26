@@ -13,8 +13,8 @@ import importlib.util
 import sys
 import types
 import unittest
+import unittest.mock
 from pathlib import Path
-from unittest import mock
 
 PKG_DIR = Path(__file__).resolve().parents[2] / "bindings" / "python" / "eai_bci"
 
@@ -47,9 +47,12 @@ class _FakeHandle:
     def destroy(self):
         self.calls.append("destroy")
 
+    # BciHandle.poll() returns a bool, so the fake returns one too: with an
+    # int 0 an assertEqual(..., 0) would also accept False and the test could
+    # not tell a successful poll from an unsuccessful one.
     def poll(self):
         self.calls.append("poll")
-        return 0
+        return True
 
     def get_intent(self):
         return {"label": "rest", "confidence": 0.5}
@@ -64,7 +67,7 @@ def _load_pipeline():
     core = types.ModuleType("eai_bci.core")
     core.BciLib = _FakeLib
     core.BciHandle = _FakeHandle
-    with mock.patch.dict(sys.modules, {"eai_bci": package, "eai_bci.core": core}):
+    with unittest.mock.patch.dict(sys.modules, {"eai_bci": package, "eai_bci.core": core}):
         spec = importlib.util.spec_from_file_location(
             "eai_bci.pipeline", PKG_DIR / "pipeline.py")
         module = importlib.util.module_from_spec(spec)
@@ -104,7 +107,7 @@ class TestBciPipeline(unittest.TestCase):
 
     def test_context_manager_starts_stops_and_destroys(self):
         with self.BciPipeline() as bci:
-            self.assertEqual(bci.poll(), 0)
+            self.assertTrue(bci.poll())
             self.assertEqual(bci.get_intent()["label"], "rest")
             self.assertEqual(bci.get_signal(16), [16])
             self.assertEqual(
