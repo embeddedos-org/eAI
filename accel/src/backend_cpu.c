@@ -7,6 +7,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 #define LOG_MOD "accel-cpu"
 
@@ -166,6 +168,19 @@ static eai_status_t cpu_tensor_elems(const eai_tensor_t *t, int *out)
  * cpu_execute() takes dimensions and element counts from one operand and
  * applies them to the others without comparing them. Everything a kernel
  * assumes about its operands is checked here, before it can index anything. */
+/* Do the two tensors' addressable bytes intersect? data_size is each tensor's
+ * own extent, which for a view is the span from its base to its last
+ * addressable element. */
+static bool cpu_ranges_overlap(const eai_tensor_t *x, const eai_tensor_t *y)
+{
+    const uint8_t *xb = (const uint8_t *)x->data;
+    const uint8_t *yb = (const uint8_t *)y->data;
+
+    if (!xb || !yb) return false;
+    if (x->data_size == 0 || y->data_size == 0) return xb == yb;
+    return xb < yb + y->data_size && yb < xb + x->data_size;
+}
+
 static eai_status_t cpu_check_op_shapes(const eai_compute_graph_t *graph,
                                         const eai_op_t *op)
 {
@@ -194,10 +209,13 @@ static eai_status_t cpu_check_op_shapes(const eai_compute_graph_t *graph,
                 return EAI_ERR_INVALID;
 
             /* The kernel writes c[i*N+j] while still reading a and b, so an
-             * output that shares a buffer with an input silently returns a
-             * wrong answer. Compare buffers rather than tensor indices: two
-             * graph slots can carry the same pointer. */
-            if (out->data == in0->data || out->data == b->data)
+             * output that shares storage with an input silently returns a
+             * wrong answer. Compare the byte ranges rather than the base
+             * pointers: two views of one source can overlap while starting at
+             * different addresses, and equal pointers are only the special
+             * case where the overlap begins at offset zero. Disjoint views of
+             * the same source stay legal. */
+            if (cpu_ranges_overlap(out, in0) || cpu_ranges_overlap(out, b))
                 return EAI_ERR_INVALID;
             return EAI_OK;
         }

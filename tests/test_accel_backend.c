@@ -1025,6 +1025,91 @@ cleanup:
     eai_tensor_destroy(&tensors[1]);
 }
 
+/* Two views of one source can overlap while starting at different addresses,
+ * so a guard comparing only base pointers lets the kernel write over the
+ * input it is still reading. Views [0,0] and [1,0] of a [3,2] source share
+ * its middle row: with a = [1,2,3,4] the unguarded run returned
+ * [19,22,249,290] instead of [19,22,43,50]. */
+static void test_cpu_refuses_matmul_output_overlapping_input_view(void)
+{
+    TEST(cpu_refuses_matmul_output_overlapping_input_view);
+    ensure_cpu_registered();
+
+    int64_t s32[] = {3, 2}, s22[] = {2, 2};
+    int64_t off0[] = {0, 0}, off1[] = {1, 0};
+    eai_tensor_t src, b, va, vc;
+    eai_tensor_create(&src, EAI_DTYPE_F32, s32, 2);
+    eai_tensor_create(&b, EAI_DTYPE_F32, s22, 2);
+    const float sv[] = {1, 2, 3, 4, 0, 0}, bv[] = {5, 6, 7, 8};
+    memcpy(src.data, sv, sizeof(sv));
+    memcpy(b.data, bv, sizeof(bv));
+
+    if (eai_tensor_create_view(&va, &src, off0, s22, 2) != EAI_OK) {
+        FAIL("a [2,2] view at [0,0] of a [3,2] source should be valid"); goto cleanup;
+    }
+    if (eai_tensor_create_view(&vc, &src, off1, s22, 2) != EAI_OK) {
+        FAIL("a [2,2] view at [1,0] of a [3,2] source should be valid"); goto cleanup;
+    }
+    if (va.data == vc.data) { FAIL("the views should start at different addresses"); goto cleanup; }
+
+    eai_tensor_t tensors[] = {va, b, vc};
+    eai_status_t st = dispatch_binary(EAI_OP_MATMUL, tensors, 3, 0, 1, 2);
+    if (st != EAI_ERR_INVALID) {
+        FAIL("expected INVALID when the output view overlaps an input view"); goto cleanup;
+    }
+
+    /* Refused means untouched: the source still holds its original rows. */
+    for (int i = 0; i < 6; i++) {
+        if (((float *)src.data)[i] != sv[i]) { FAIL("the source was overwritten"); goto cleanup; }
+    }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&src);
+    eai_tensor_destroy(&b);
+}
+
+/* Disjoint views of one source are legal and must keep working, or the
+ * overlap check would have been a blanket ban on views. Rows 0 and 2 of a
+ * [4,2] source do not intersect. */
+static void test_cpu_allows_matmul_over_disjoint_views(void)
+{
+    TEST(cpu_allows_matmul_over_disjoint_views);
+    ensure_cpu_registered();
+
+    int64_t s42[] = {4, 2}, s22[] = {2, 2};
+    int64_t off0[] = {0, 0}, off2[] = {2, 0};
+    eai_tensor_t src, b, va, vc;
+    eai_tensor_create(&src, EAI_DTYPE_F32, s42, 2);
+    eai_tensor_create(&b, EAI_DTYPE_F32, s22, 2);
+    const float sv[] = {1, 2, 3, 4, 0, 0, 0, 0}, bv[] = {5, 6, 7, 8};
+    memcpy(src.data, sv, sizeof(sv));
+    memcpy(b.data, bv, sizeof(bv));
+
+    if (eai_tensor_create_view(&va, &src, off0, s22, 2) != EAI_OK ||
+        eai_tensor_create_view(&vc, &src, off2, s22, 2) != EAI_OK) {
+        FAIL("disjoint views of a [4,2] source should be valid"); goto cleanup;
+    }
+
+    eai_tensor_t tensors[] = {va, b, vc};
+    if (dispatch_binary(EAI_OP_MATMUL, tensors, 3, 0, 1, 2) != EAI_OK) {
+        FAIL("a matmul over disjoint views was refused"); goto cleanup;
+    }
+
+    /* [1,2;3,4] x [5,6;7,8] = [19,22;43,50], written to rows 2-3. */
+    const float want[] = {19, 22, 43, 50};
+    for (int i = 0; i < 4; i++) {
+        if (((float *)src.data)[4 + i] != want[i]) { FAIL("wrong matmul result"); goto cleanup; }
+    }
+    /* The input rows are untouched. */
+    for (int i = 0; i < 4; i++) {
+        if (((float *)src.data)[i] != sv[i]) { FAIL("the input rows were modified"); goto cleanup; }
+    }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&src);
+    eai_tensor_destroy(&b);
+}
+
 /* The checks must not cost well-formed graphs anything: a matmul whose
  * output happens to be a separate buffer of the right shape still runs. */
 static void test_cpu_still_runs_well_formed_graphs(void)
@@ -1100,6 +1185,8 @@ int main(void)
     test_cpu_refuses_element_count_that_overflows_int();
     test_cpu_refuses_oversized_view();
     test_cpu_refuses_matmul_output_aliasing_input();
+    test_cpu_refuses_matmul_output_overlapping_input_view();
+    test_cpu_allows_matmul_over_disjoint_views();
     test_cpu_still_runs_well_formed_graphs();
     test_graph_destroy_null();
     test_graph_destroy_empty();

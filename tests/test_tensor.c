@@ -6,6 +6,7 @@
 #include <string.h>
 #include <math.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include "eai/accel.h"
 
 static int tests_run = 0, tests_passed = 0, tests_failed = 0;
@@ -270,6 +271,62 @@ cleanup:
 /* A view was free to name a shape larger than its source. A [8] view over a
  * [4] tensor handed consumers a tensor whose shape promised twice the memory
  * that exists, and the CPU backend duly read all of it. */
+/* A shape whose byte size does not fit a size_t used to be multiplied out
+ * anyway: 2^62+1 F32 elements wrapped to 4, calloc(1, 4) succeeded, and the
+ * tensor reported data_size 4 for a shape promising exabytes. Every bounds
+ * check downstream trusts data_size, so the wrap defeated all of them. */
+static void test_tensor_create_refuses_size_overflow(void)
+{
+    TEST(tensor_create_refuses_size_overflow);
+    eai_tensor_t t;
+
+    int64_t huge[] = {(int64_t)1 << 62, 4};
+    if (eai_tensor_create(&t, EAI_DTYPE_F32, huge, 2) == EAI_OK) {
+        eai_tensor_destroy(&t);
+        FAIL("an element count whose byte size overflows was accepted"); return;
+    }
+
+    /* The product of the dimensions overflows int64 before any byte count. */
+    int64_t wrap[] = {(int64_t)1 << 40, (int64_t)1 << 40};
+    if (eai_tensor_create(&t, EAI_DTYPE_F32, wrap, 2) == EAI_OK) {
+        eai_tensor_destroy(&t);
+        FAIL("a shape whose element count overflows int64 was accepted"); return;
+    }
+
+    /* A non-positive dimension is not a buffer at all. */
+    int64_t zero[] = {0};
+    if (eai_tensor_create(&t, EAI_DTYPE_F32, zero, 1) == EAI_OK) {
+        eai_tensor_destroy(&t);
+        FAIL("a zero dimension was accepted"); return;
+    }
+    PASS();
+}
+
+/* The view path formed the same products. Given a source carrying an
+ * overflowing shape, a full view of it wrapped to a small span and passed
+ * the bound against the source's (equally wrapped) data_size. */
+static void test_tensor_view_refuses_span_overflow(void)
+{
+    TEST(tensor_view_refuses_span_overflow);
+    int64_t s4[] = {4};
+    eai_tensor_t src, view;
+    eai_tensor_create(&src, EAI_DTYPE_F32, s4, 1);
+
+    /* Hand-built source with a shape whose span overflows: create() refuses
+     * to build one now, so the view path is exercised directly. */
+    eai_tensor_t evil = src;
+    evil.shape[0] = ((int64_t)1 << 62) + 1;
+    evil.strides[0] = 1;
+
+    int64_t full[] = {((int64_t)1 << 62) + 1};
+    if (eai_tensor_create_view(&view, &evil, NULL, full, 1) == EAI_OK) {
+        FAIL("a view whose byte span overflows size_t was accepted"); goto cleanup;
+    }
+    PASS();
+cleanup:
+    eai_tensor_destroy(&src);
+}
+
 static void test_tensor_view_refuses_shape_larger_than_source(void)
 {
     TEST(tensor_view_refuses_shape_larger_than_source);
@@ -406,6 +463,8 @@ int main(void)
     test_tensor_view_with_offset();
     test_tensor_view_reports_its_extent();
     test_tensor_view_refuses_shape_larger_than_source();
+    test_tensor_create_refuses_size_overflow();
+    test_tensor_view_refuses_span_overflow();
     test_dtype_size_all();
     test_tensor_numel_null();
     test_tensor_numel_zero_ndim();

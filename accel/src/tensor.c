@@ -2,6 +2,7 @@
 // Tensor library implementation
 
 #include "eai/accel.h"
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -41,8 +42,15 @@ eai_status_t eai_tensor_create(eai_tensor_t *t, eai_dtype_t dtype,
     t->dtype = dtype;
     t->ndim = ndim;
 
+    /* numel and the byte size derived from it must both be representable, or
+     * the allocation silently wraps: a 2^62+1 element F32 tensor multiplied
+     * out to 4 bytes, calloc succeeded, and the tensor then reported a
+     * data_size of 4 for a shape promising exabytes. Every bounds check
+     * downstream trusts data_size, so the wrap defeated all of them. */
     int64_t numel = 1;
     for (int i = 0; i < ndim; i++) {
+        if (shape[i] <= 0) return EAI_ERR_INVALID;
+        if (numel > INT64_MAX / shape[i]) return EAI_ERR_INVALID;
         t->shape[i] = shape[i];
         numel *= shape[i];
     }
@@ -54,6 +62,9 @@ eai_status_t eai_tensor_create(eai_tensor_t *t, eai_dtype_t dtype,
     }
 
     size_t elem_size = eai_dtype_size(dtype);
+    if (elem_size == 0) return EAI_ERR_INVALID;
+    if ((uint64_t)numel > (uint64_t)SIZE_MAX / elem_size) return EAI_ERR_INVALID;
+
     t->data_size = (size_t)numel * elem_size;
     t->data = calloc(1, t->data_size);
     if (!t->data) return EAI_ERR_NOMEM;
@@ -94,6 +105,13 @@ eai_status_t eai_tensor_create_view(eai_tensor_t *t, eai_tensor_t *src,
         first += off * src->strides[i];
         last  += (shape[i] - 1) * src->strides[i];
     }
+
+    /* Both products must fit a size_t before they are formed. A source whose
+     * own extent wrapped (or one built by hand) can carry a shape whose span
+     * multiplies past SIZE_MAX, and the wrapped result would then compare
+     * small enough to pass the bound below. */
+    if ((uint64_t)first > (uint64_t)SIZE_MAX / elem_size) return EAI_ERR_INVALID;
+    if ((uint64_t)(last + 1) > (uint64_t)SIZE_MAX / elem_size) return EAI_ERR_INVALID;
 
     size_t byte_offset = (size_t)first * elem_size;
     size_t span_bytes  = (size_t)(last + 1) * elem_size;
