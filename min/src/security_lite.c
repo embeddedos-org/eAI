@@ -9,7 +9,12 @@
 #include <string.h>
 #include <time.h>
 #include <stdio.h>
-#ifndef _WIN32
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
 #include <unistd.h>
 #endif
 
