@@ -23,11 +23,20 @@ eai_status_t eai_fw_mem_set(eai_fw_memory_t *mem, const char *ns, const char *ke
 {
     if (!mem || !ns || !key || !value) return EAI_ERR_INVALID;
 
+    /* Namespace and key are stored cut to NS_MAX - 1 and KEY_MAX - 1
+     * characters, while get(), delete() and the update lookup compare the
+     * full strings. Refuse longer names instead of storing unreachable
+     * entries that each set() call would duplicate. */
+    if (strlen(ns) >= EAI_FW_MEM_NS_MAX || strlen(key) >= EAI_FW_MEM_KEY_MAX) {
+        return EAI_ERR_INVALID;
+    }
+
     /* update existing */
     for (int i = 0; i < mem->count; i++) {
         if (strcmp(mem->entries[i].namespace_name, ns) == 0 &&
             strcmp(mem->entries[i].key, key) == 0) {
             strncpy(mem->entries[i].value, value, EAI_FW_MEM_VALUE_MAX - 1);
+            mem->entries[i].value[EAI_FW_MEM_VALUE_MAX - 1] = '\0';
             mem->entries[i].timestamp = (uint64_t)time(NULL);
             mem->entries[i].ttl_sec = ttl_sec;
             mem->entries[i].persistent = (ttl_sec == 0);
@@ -42,8 +51,11 @@ eai_status_t eai_fw_mem_set(eai_fw_memory_t *mem, const char *ns, const char *ke
 
     eai_fw_mem_entry_t *e = &mem->entries[mem->count];
     strncpy(e->namespace_name, ns, EAI_FW_MEM_NS_MAX - 1);
+    e->namespace_name[EAI_FW_MEM_NS_MAX - 1] = '\0';
     strncpy(e->key, key, EAI_FW_MEM_KEY_MAX - 1);
+    e->key[EAI_FW_MEM_KEY_MAX - 1] = '\0';
     strncpy(e->value, value, EAI_FW_MEM_VALUE_MAX - 1);
+    e->value[EAI_FW_MEM_VALUE_MAX - 1] = '\0';
     e->timestamp = (uint64_t)time(NULL);
     e->ttl_sec = ttl_sec;
     e->persistent = (ttl_sec == 0);

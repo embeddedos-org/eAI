@@ -200,6 +200,94 @@ static void test_fw_mem_update_to_ttl_is_not_saved(void)
     PASS();
 }
 
+static void test_fw_mem_long_namespace_and_key(void)
+{
+    TEST(fw_mem_long_namespace_and_key);
+    eai_fw_mem_init(&g_mem, NULL);
+
+    char ns_max[EAI_FW_MEM_NS_MAX];
+    char ns_over[EAI_FW_MEM_NS_MAX + 8];
+    char key_max[EAI_FW_MEM_KEY_MAX];
+    char key_over[EAI_FW_MEM_KEY_MAX + 8];
+
+    memset(ns_max, 'n', sizeof(ns_max) - 1);
+    ns_max[sizeof(ns_max) - 1] = '\0';
+    memset(ns_over, 'n', sizeof(ns_over) - 1);
+    ns_over[sizeof(ns_over) - 1] = '\0';
+
+    memset(key_max, 'k', sizeof(key_max) - 1);
+    key_max[sizeof(key_max) - 1] = '\0';
+    memset(key_over, 'k', sizeof(key_over) - 1);
+    key_over[sizeof(key_over) - 1] = '\0';
+
+    /* Exact maximum lengths (NS=31, KEY=127) must round-trip, update, and delete. */
+    if (eai_fw_mem_set(&g_mem, ns_max, key_max, "v1", 0) != EAI_OK) {
+        FAIL("max-length ns/key set failed"); return;
+    }
+    if (eai_fw_mem_set(&g_mem, ns_max, key_max, "v2", 0) != EAI_OK || g_mem.count != 1) {
+        FAIL("max-length ns/key update failed or duplicated"); return;
+    }
+    const char *v = eai_fw_mem_get(&g_mem, ns_max, key_max);
+    if (!v || strcmp(v, "v2") != 0) {
+        FAIL("max-length ns/key get failed"); return;
+    }
+
+    /* Oversized namespace (>= EAI_FW_MEM_NS_MAX) must be rejected without leaking entries. */
+    for (int i = 0; i < 3; i++) {
+        if (eai_fw_mem_set(&g_mem, ns_over, "ok_key", "bad", 0) != EAI_ERR_INVALID) {
+            FAIL("oversized namespace returned OK instead of EAI_ERR_INVALID"); return;
+        }
+    }
+    if (g_mem.count != 1 || eai_fw_mem_get(&g_mem, ns_over, "ok_key") != NULL) {
+        FAIL("oversized namespace added or exposed an entry"); return;
+    }
+
+    /* Oversized key (>= EAI_FW_MEM_KEY_MAX) must be rejected without leaking entries. */
+    for (int i = 0; i < 3; i++) {
+        if (eai_fw_mem_set(&g_mem, "ok_ns", key_over, "bad", 0) != EAI_ERR_INVALID) {
+            FAIL("oversized key returned OK instead of EAI_ERR_INVALID"); return;
+        }
+    }
+    if (g_mem.count != 1 || eai_fw_mem_get(&g_mem, "ok_ns", key_over) != NULL) {
+        FAIL("oversized key added or exposed an entry"); return;
+    }
+
+    if (eai_fw_mem_delete(&g_mem, ns_max, key_max) != EAI_OK || g_mem.count != 0) {
+        FAIL("max-length ns/key delete failed"); return;
+    }
+    PASS();
+}
+
+static void test_fw_mem_value_nul_terminated(void)
+{
+    TEST(fw_mem_value_nul_terminated);
+    eai_fw_mem_init(&g_mem, NULL);
+
+    /* Dirty the trailing byte of slot 0 via delete/shift simulation, then insert a full value. */
+    memset(g_mem.entries[0].value, 'X', sizeof(g_mem.entries[0].value));
+
+    char long_val[EAI_FW_MEM_VALUE_MAX + 32];
+    memset(long_val, 'a', sizeof(long_val) - 1);
+    long_val[sizeof(long_val) - 1] = '\0';
+
+    if (eai_fw_mem_set(&g_mem, "ns", "k", long_val, 0) != EAI_OK) {
+        FAIL("insert of long value failed"); return;
+    }
+    if (g_mem.entries[0].value[EAI_FW_MEM_VALUE_MAX - 1] != '\0') {
+        FAIL("inserted value is not NUL-terminated"); return;
+    }
+
+    /* Dirty slot 0 tail byte again before updating in place. */
+    g_mem.entries[0].value[EAI_FW_MEM_VALUE_MAX - 1] = 'Z';
+    if (eai_fw_mem_set(&g_mem, "ns", "k", long_val, 0) != EAI_OK) {
+        FAIL("update of long value failed"); return;
+    }
+    if (g_mem.entries[0].value[EAI_FW_MEM_VALUE_MAX - 1] != '\0') {
+        FAIL("updated value is not NUL-terminated"); return;
+    }
+    PASS();
+}
+
 int main(void)
 {
     printf("=== EAI Framework Tests ===\n\n");
@@ -213,6 +301,8 @@ int main(void)
     test_fed_aggregate_skips_removed_participant();
     test_fw_mem_update_to_no_ttl_is_saved();
     test_fw_mem_update_to_ttl_is_not_saved();
+    test_fw_mem_long_namespace_and_key();
+    test_fw_mem_value_nul_terminated();
 
     printf("\n=== Results: %d/%d passed, %d failed ===\n",
            tests_passed, tests_run, tests_failed);
