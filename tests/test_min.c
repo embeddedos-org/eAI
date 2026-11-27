@@ -379,6 +379,120 @@ static void test_agent_tool_result_reaches_model(void)
     PASS();
 }
 
+/* #101: a failed tool call must reach the model like a successful one.
+ * Before the fix the run loop set have_tool_result only on the success
+ * branch, so after a tool error the prompt was rebuilt byte-identical and
+ * a deterministic model repeated the same CALL: until max_iterations,
+ * ending with the raw CALL: line as the output. This scripted model
+ * repeats the failing CALL: unless the prompt carries the failure, in
+ * which case it stops with a plain answer. */
+static char fail_prompts[4][EAI_AGENT_PROMPT_MAX];
+static int  fail_infer_calls;
+static char fail_tool_call[64];
+
+static eai_status_t fail_scripted_infer(eai_runtime_t *rt, const eai_inference_input_t *in,
+                                        eai_inference_output_t *out)
+{
+    (void)rt;
+    if (fail_infer_calls < 4) {
+        snprintf(fail_prompts[fail_infer_calls], sizeof(fail_prompts[0]),
+                 "%.*s", (int)in->text_len, in->text);
+    }
+    fail_infer_calls++;
+    const char *reply = strstr(in->text, " failed: ")
+                            ? "The tool failed, stopping."
+                            : fail_tool_call;
+    snprintf(out->text, sizeof(out->text), "%s", reply);
+    out->text_len = strlen(out->text);
+    return EAI_OK;
+}
+
+static const eai_runtime_ops_t fail_scripted_ops = { .name = "scripted-fail", .infer = fail_scripted_infer };
+
+static eai_status_t broken_tool_exec(const eai_kv_t *args, int arg_count,
+                                     eai_tool_result_t *result)
+{
+    (void)args; (void)arg_count; (void)result;
+    return EAI_ERR_RUNTIME;
+}
+
+static void test_agent_tool_failure_reaches_model(void)
+{
+    TEST(agent_tool_failure_reaches_model);
+    eai_min_runtime_t rt;
+    memset(&rt, 0, sizeof(rt));
+    rt.base.ops = &fail_scripted_ops;
+    rt.base.loaded = true;
+    rt.initialized = true;
+
+    eai_tool_registry_t tools;
+    eai_tool_registry_init(&tools);
+    eai_tool_t broken_tool = {0};
+    snprintf(broken_tool.name, sizeof(broken_tool.name), "broken.tool");
+    broken_tool.exec = broken_tool_exec;
+    if (eai_tool_register(&tools, &broken_tool) != EAI_OK) { FAIL("tool register failed"); return; }
+
+    eai_min_agent_t agent;
+    eai_min_agent_init(&agent, &rt, &tools, NULL);
+    fail_infer_calls = 0;
+    snprintf(fail_tool_call, sizeof(fail_tool_call), "CALL:broken.tool()");
+    eai_agent_task_t task = { .goal = "Run the broken tool", .max_iterations = 6 };
+
+    eai_status_t st = eai_min_agent_run(&agent, &task);
+    if (st != EAI_OK) { FAIL("agent run failed"); return; }
+    if (fail_infer_calls != 2) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "expected exactly two model calls, got %d", fail_infer_calls);
+        FAIL(msg); return;
+    }
+    if (!strstr(fail_prompts[1], "Tool broken.tool failed: 7")) {
+        FAIL("prompt after the failed tool call does not contain the failure"); return;
+    }
+    if (strcmp(eai_min_agent_output(&agent), "The tool failed, stopping.") != 0) {
+        char msg[160];
+        snprintf(msg, sizeof(msg), "final output is \"%.100s\"", eai_min_agent_output(&agent));
+        FAIL(msg); return;
+    }
+    PASS();
+}
+
+static void test_agent_unknown_tool_failure_reaches_model(void)
+{
+    TEST(agent_unknown_tool_failure_reaches_model);
+    eai_min_runtime_t rt;
+    memset(&rt, 0, sizeof(rt));
+    rt.base.ops = &fail_scripted_ops;
+    rt.base.loaded = true;
+    rt.initialized = true;
+
+    /* Empty registry: the model asks for a tool that does not exist. */
+    eai_tool_registry_t tools;
+    eai_tool_registry_init(&tools);
+
+    eai_min_agent_t agent;
+    eai_min_agent_init(&agent, &rt, &tools, NULL);
+    fail_infer_calls = 0;
+    snprintf(fail_tool_call, sizeof(fail_tool_call), "CALL:nosuch.tool()");
+    eai_agent_task_t task = { .goal = "Run the unknown tool", .max_iterations = 6 };
+
+    eai_status_t st = eai_min_agent_run(&agent, &task);
+    if (st != EAI_OK) { FAIL("agent run failed"); return; }
+    if (fail_infer_calls != 2) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "expected exactly two model calls, got %d", fail_infer_calls);
+        FAIL(msg); return;
+    }
+    if (!strstr(fail_prompts[1], "Tool nosuch.tool failed: 3")) {
+        FAIL("prompt after the unknown tool call does not contain the failure"); return;
+    }
+    if (strcmp(eai_min_agent_output(&agent), "The tool failed, stopping.") != 0) {
+        char msg[160];
+        snprintf(msg, sizeof(msg), "final output is \"%.100s\"", eai_min_agent_output(&agent));
+        FAIL(msg); return;
+    }
+    PASS();
+}
+
 int main(void)
 {
     printf("=== EAI Min Tests ===\n");
@@ -394,6 +508,8 @@ int main(void)
     test_load_empty_model_falls_back();
     test_load_mismatched_bias_model_falls_back();
     test_agent_tool_result_reaches_model();
+    test_agent_tool_failure_reaches_model();
+    test_agent_unknown_tool_failure_reaches_model();
 
     printf("\nResults: %d/%d passed, %d failed\n", tests_passed, tests_run, tests_failed);
     return tests_failed > 0 ? 1 : 0;

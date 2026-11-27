@@ -145,19 +145,19 @@ static eai_status_t agent_think(eai_min_agent_t *agent, const char *goal,
 
 static eai_status_t agent_handle_tool_call(eai_min_agent_t *agent)
 {
-    if (!agent->tools) {
-        agent->state = EAI_AGENT_ERROR;
-        return EAI_ERR_NOT_FOUND;
-    }
-
-    /* parse "CALL:<tool_name>(<key>=<val>)" */
+    /* parse "CALL:<tool_name>(<key>=<val>)" first: the tool name is needed
+     * for the failure message even when there is no registry to search. */
     char tool_name[EAI_TOOL_NAME_MAX];
-    char args_str[1024];
 
     const char *p = agent->last_output + 5;  /* skip "CALL:" */
     const char *paren = strchr(p, '(');
     if (!paren) {
-        agent->state = EAI_AGENT_ERROR;
+        /* Malformed CALL: — no tool name to report. Feed the failure back
+         * to the model (state THINKING) instead of erroring out: the model
+         * can retry with a well-formed call or stop. */
+        snprintf(agent->last_output, sizeof(agent->last_output),
+                 "Tool call failed: %d", (int)EAI_ERR_INVALID);
+        agent->state = EAI_AGENT_THINKING;
         return EAI_ERR_INVALID;
     }
 
@@ -166,14 +166,24 @@ static eai_status_t agent_handle_tool_call(eai_min_agent_t *agent)
     memcpy(tool_name, p, name_len);
     tool_name[name_len] = '\0';
 
+    if (!agent->tools) {
+        snprintf(agent->last_output, sizeof(agent->last_output),
+                 "Tool %s failed: %d", tool_name, (int)EAI_ERR_NOT_FOUND);
+        agent->state = EAI_AGENT_THINKING;
+        return EAI_ERR_NOT_FOUND;
+    }
+
     eai_tool_t *tool = eai_tool_find(agent->tools, tool_name);
     if (!tool) {
         EAI_LOG_ERROR(LOG_MOD, "tool not found: %s", tool_name);
-        agent->state = EAI_AGENT_ERROR;
+        snprintf(agent->last_output, sizeof(agent->last_output),
+                 "Tool %s failed: %d", tool_name, (int)EAI_ERR_NOT_FOUND);
+        agent->state = EAI_AGENT_THINKING;
         return EAI_ERR_NOT_FOUND;
     }
 
     /* parse arguments from "CALL:tool_name(key=val, key2=val2)" */
+    char args_str[1024];
     static char key_bufs[EAI_TOOL_MAX_PARAMS][128];
     static char val_bufs[EAI_TOOL_MAX_PARAMS][256];
     eai_kv_t args[EAI_TOOL_MAX_PARAMS];
@@ -221,6 +231,13 @@ static eai_status_t agent_handle_tool_call(eai_min_agent_t *agent)
     if (s == EAI_OK) {
         snprintf(agent->last_output, sizeof(agent->last_output),
                  "Tool %s returned: %.*s", tool_name, (int)result.len, result.data);
+    } else {
+        /* Feed the failure back to the model on the next think: without
+         * this the run loop rebuilds the prompt byte-identical and a
+         * deterministic model repeats the same CALL: until
+         * max_iterations (#101). */
+        snprintf(agent->last_output, sizeof(agent->last_output),
+                 "Tool %s failed: %d", tool_name, (int)s);
     }
 
     agent->state = EAI_AGENT_THINKING;
@@ -253,9 +270,13 @@ eai_status_t eai_min_agent_run(eai_min_agent_t *agent, const eai_agent_task_t *t
             eai_status_t s = agent_handle_tool_call(agent);
             if (s != EAI_OK) {
                 EAI_LOG_WARN(LOG_MOD, "tool call failed, continuing");
-            } else {
-                have_tool_result = true;
             }
+            /* Success or failure, last_output now holds the tool's outcome
+             * ("Tool <name> returned: ..." or "Tool <name> failed: <code>"),
+             * so the next prompt carries it and the model can retry
+             * differently or stop instead of repeating the same CALL:
+             * until max_iterations (#101). */
+            have_tool_result = true;
             continue;
         }
 
