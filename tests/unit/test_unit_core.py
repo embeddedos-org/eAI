@@ -169,10 +169,19 @@ class TestNPUPipeline(unittest.TestCase):
         self.assertEqual(scores.shape, (seq_len, seq_len))
 
     def test_layer_norm(self):
-        x = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
-        mean, std = x.mean(), x.std()
-        normed = (x - mean) / (std + 1e-5)
+        # Verify the layer-norm formula: (x - mean) / sqrt(var + eps).
+        # A near-constant vector makes the difference between
+        # sqrt(var + eps) and (std + eps) visible.
+        x = np.array([1.0, 1.0, 1.0001, 0.9999], dtype=np.float32)
+        eps = 1e-5
+        mean = x.mean()
+        var = float(np.mean((x - mean) ** 2))
+        normed = (x - mean) / np.sqrt(var + eps)
         self.assertAlmostEqual(float(normed.mean()), 0.0, places=5)
+        # With the original [1,2,3,4] the two formulas almost coincide;
+        # here the wrong denominator (std + eps) gives mean(normed^2) ~0.77
+        # while the correct one gives a value near var/(var+eps) << 1.
+        self.assertLess(float(np.mean(normed ** 2)), 0.01)
 
     def test_embedding_lookup(self):
         vocab_size, embed_dim = 100, 32
