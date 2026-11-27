@@ -167,7 +167,9 @@ static eai_status_t cpu_tensor_elems(const eai_tensor_t *t, int *out)
  *
  * cpu_execute() takes dimensions and element counts from one operand and
  * applies them to the others without comparing them. Everything a kernel
- * assumes about its operands is checked here, before it can index anything. */
+ * assumes about its operands is checked here, before it can index anything:
+ * the extents agree, and every operand is contiguous, because the kernels
+ * walk `data` as a flat float array. */
 /* Do the two tensors' addressable bytes intersect? data_size is each tensor's
  * own extent, which for a view is the span from its base to its last
  * addressable element. */
@@ -181,6 +183,26 @@ static bool cpu_ranges_overlap(const eai_tensor_t *x, const eai_tensor_t *y)
     return xb < yb + y->data_size && yb < xb + x->data_size;
 }
 
+/* Whether a tensor's elements lie densely in row-major order, which is
+ * what every kernel below assumes when it indexes `data` as a flat float
+ * array. A view borrows its source's strides, so a view narrower than its
+ * source is strided: a flat walk reads the wrong elements in-bounds.
+ * A dimension of size 1 takes no step, so its stride is irrelevant;
+ * every other dimension must step by exactly the product of the sizes
+ * after it. Callers run cpu_tensor_elems() first, so the shapes are
+ * positive and the element count fits an int, and the running product
+ * below cannot overflow. */
+static bool cpu_tensor_is_contiguous(const eai_tensor_t *t)
+{
+    int64_t expect = 1;
+    for (int i = t->ndim - 1; i >= 0; i--) {
+        if (t->shape[i] != 1 && t->strides[i] != expect)
+            return false;
+        expect *= t->shape[i];
+    }
+    return true;
+}
+
 static eai_status_t cpu_check_op_shapes(const eai_compute_graph_t *graph,
                                         const eai_op_t *op)
 {
@@ -192,10 +214,19 @@ static eai_status_t cpu_check_op_shapes(const eai_compute_graph_t *graph,
     if ((st = cpu_tensor_elems(in0, &n_in0)) != EAI_OK) return st;
     if ((st = cpu_tensor_elems(out, &n_out)) != EAI_OK) return st;
 
+    /* Every kernel below indexes `data` as a flat float array. A strided
+     * view passes the extent checks above (its span covers its elements)
+     * but a flat walk reads the wrong ones in-bounds, so refuse it here,
+     * at op entry, until the kernels learn strides. Silent wrong data is
+     * worse than an error. */
+    if (!cpu_tensor_is_contiguous(in0) || !cpu_tensor_is_contiguous(out))
+        return EAI_ERR_INVALID;
+
     switch (op->type) {
         case EAI_OP_MATMUL: {
             const eai_tensor_t *b = &graph->tensors[op->input_indices[1]];
             if ((st = cpu_tensor_elems(b, &n_b)) != EAI_OK) return st;
+            if (!cpu_tensor_is_contiguous(b)) return EAI_ERR_INVALID;
 
             /* cpu_matmul_f32 reads M and K from a and N from b, then indexes
              * a[i*K+k], b[k*N+j] and c[i*N+j]. Nothing else relates the three
@@ -223,6 +254,7 @@ static eai_status_t cpu_check_op_shapes(const eai_compute_graph_t *graph,
         case EAI_OP_MUL: {
             const eai_tensor_t *b = &graph->tensors[op->input_indices[1]];
             if ((st = cpu_tensor_elems(b, &n_b)) != EAI_OK) return st;
+            if (!cpu_tensor_is_contiguous(b)) return EAI_ERR_INVALID;
             /* The loop runs numel(a) times and indexes all three buffers. */
             if (n_b != n_in0 || n_out != n_in0) return EAI_ERR_INVALID;
             return EAI_OK;
