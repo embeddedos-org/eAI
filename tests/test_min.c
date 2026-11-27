@@ -379,6 +379,25 @@ static void test_agent_tool_result_reaches_model(void)
     PASS();
 }
 
+static void test_security_lite_boot_verify(void)
+{
+    TEST(security_lite_boot_verify);
+    static eai_min_security_lite_t sec;
+    if (eai_min_sec_init(&sec, NULL) != EAI_OK) {
+        FAIL("sec_init failed"); return;
+    }
+    if (eai_min_sec_verify_boot(&sec) != EAI_OK) {
+        FAIL("sec_verify_boot failed"); return;
+    }
+    if (!sec.boot_verified) {
+        FAIL("boot_verified flag not set"); return;
+    }
+    if (eai_min_sec_audit_count(&sec) < 1) {
+        FAIL("expected boot check audit entry"); return;
+    }
+    PASS();
+}
+
 int main(void)
 {
     printf("=== EAI Min Tests ===\n");
@@ -394,6 +413,7 @@ int main(void)
     test_load_empty_model_falls_back();
     test_load_mismatched_bias_model_falls_back();
     test_agent_tool_result_reaches_model();
+    test_security_lite_boot_verify();
 
     printf("\nResults: %d/%d passed, %d failed\n", tests_passed, tests_run, tests_failed);
     return tests_failed > 0 ? 1 : 0;

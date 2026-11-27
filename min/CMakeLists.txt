@@ -17,6 +17,10 @@ target_include_directories(eai_min PUBLIC
 
 target_link_libraries(eai_min PUBLIC eai_common)
 
+if(WIN32)
+    target_link_libraries(eai_min PRIVATE ws2_32)
+endif()
+
 if(EAI_LLAMA_CPP)
     target_sources(eai_min PRIVATE src/runtime_llama.c)
     target_compile_definitions(eai_min PUBLIC EAI_LLAMA_CPP_ENABLED)
