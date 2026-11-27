@@ -36,6 +36,7 @@ const char *eai_status_str(eai_status_t status)
         case EAI_ERR_DELEGATE:       return "ERR_DELEGATE";
         case EAI_ERR_NOT_IMPLEMENTED: return "ERR_NOT_IMPLEMENTED";
         case EAI_ERR_HW_UNAVAILABLE: return "ERR_HW_UNAVAILABLE";
+        case EAI_ERR_SIGNATURE:      return "ERR_SIGNATURE";
         default:                    return "UNKNOWN";
     }
 }

@@ -43,6 +43,7 @@ static void test_all_status_strings_are_defined(void)
         { EAI_ERR_DELEGATE,        "ERR_DELEGATE" },
         { EAI_ERR_NOT_IMPLEMENTED, "ERR_NOT_IMPLEMENTED" },
         { EAI_ERR_HW_UNAVAILABLE,  "ERR_HW_UNAVAILABLE" },
+        { EAI_ERR_SIGNATURE,       "ERR_SIGNATURE" },
     };
 
     int n = sizeof(cases) / sizeof(cases[0]);
@@ -99,6 +100,7 @@ static void test_status_strings_unique(void)
         EAI_ERR_RESOURCE_BUDGET, EAI_ERR_BCI_SIGNAL, EAI_ERR_BCI_CALIBRATION,
         EAI_ERR_BCI_DECODE, EAI_ERR_PLATFORM, EAI_ERR_ACCEL, EAI_ERR_FORMAT,
         EAI_ERR_DELEGATE, EAI_ERR_NOT_IMPLEMENTED, EAI_ERR_HW_UNAVAILABLE,
+        EAI_ERR_SIGNATURE,
     };
     int n = sizeof(codes) / sizeof(codes[0]);
 
@@ -136,7 +138,7 @@ static void test_all_errors_nonzero(void)
         EAI_ERR_NOMEM, EAI_ERR_INVALID, EAI_ERR_NOT_FOUND,
         EAI_ERR_IO, EAI_ERR_TIMEOUT, EAI_ERR_PLATFORM,
         EAI_ERR_ACCEL, EAI_ERR_FORMAT, EAI_ERR_DELEGATE,
-        EAI_ERR_NOT_IMPLEMENTED, EAI_ERR_HW_UNAVAILABLE,
+        EAI_ERR_NOT_IMPLEMENTED, EAI_ERR_HW_UNAVAILABLE, EAI_ERR_SIGNATURE,
     };
     int n = sizeof(errors) / sizeof(errors[0]);
     for (int i = 0; i < n; i++) {
